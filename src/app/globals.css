@@ -1,0 +1,38 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  --bg: #ffffff;
+  --fg: #18181b;
+  --card: #f4f4f5;
+  --card-border: #e4e4e7;
+  --sidebar-bg: #fafafa;
+  --accent: #0d9488;
+  --accent-fg: #ffffff;
+  --accent-subtle: rgba(13, 148, 136, 0.08);
+  --muted: #71717a;
+  --unread-dot: #0d9488;
+  --ai-border: rgba(13, 148, 136, 0.2);
+  --ai-bg: rgba(13, 148, 136, 0.04);
+}
+
+.dark {
+  --bg: #0f0f14;
+  --fg: #e4e4e7;
+  --card: rgba(255, 255, 255, 0.04);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --sidebar-bg: #12121a;
+  --accent: #2dd4bf;
+  --accent-fg: #111118;
+  --accent-subtle: rgba(45, 212, 191, 0.1);
+  --muted: #a1a1aa;
+  --unread-dot: #2dd4bf;
+  --ai-border: rgba(45, 212, 191, 0.2);
+  --ai-bg: rgba(45, 212, 191, 0.05);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+}

@@ -1,0 +1,33 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        TZ: Asia/Tokyo
+        CLAUDE_CODE_VERSION: latest
+    ports:
+      - "3000:3000"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ..:/workspaces:cached
+      - .:/app:cached
+      - node_modules:/app/node_modules
+      - claude-config:/home/node/.claude
+      - bash-history:/commandhistory
+    environment:
+      NODE_OPTIONS: --max-old-space-size=4096
+      CLAUDE_CONFIG_DIR: /home/node/.claude
+      POWERLEVEL9K_DISABLE_GITSTATUS: "true"
+      COREPACK_ENABLE_AUTO_PIN: "0"
+      ENCRYPTION_KEY: 69fcf323e4cc07ac16d841253473327e421eb4d4042b1726ca47e4ac9a5c2817
+    working_dir: /app
+    command: sleep infinity
+
+volumes:
+  node_modules:
+  claude-config:
+  bash-history:
