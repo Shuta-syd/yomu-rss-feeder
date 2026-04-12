@@ -3,6 +3,7 @@ import { syncAllFeeds } from "./rss/sync";
 import { getPendingStage1Ids, processStage1ForArticles } from "./llm/stage1";
 import { isXConnected } from "./x/auth";
 import { fetchAndStoreLikes } from "./x/likes";
+import { initVapid, sendPushToAll } from "./push";
 
 const TICK = "*/5 * * * *";
 const X_LIKES_DAILY = "0 3 * * *";
@@ -12,6 +13,7 @@ let started = false;
 export function initCron(): void {
   if (started) return;
   started = true;
+  initVapid();
 
   cron.schedule(TICK, async () => {
     const startedAt = Date.now();
@@ -31,6 +33,13 @@ export function initCron(): void {
         } catch (e) {
           console.error("[yomu] stage1 pending batch failed", e);
         }
+      }
+
+      // 新着記事があればPush通知
+      if (summary.newArticles > 0) {
+        sendPushToAll("Yomu", `新しい記事が${summary.newArticles}件あります`).catch((e) =>
+          console.error("[yomu] push notification failed", e),
+        );
       }
 
       const elapsed = Date.now() - startedAt;

@@ -8,7 +8,7 @@ RUN = $(COMPOSE_DEV) exec -T $(APP_SERVICE)
 .PHONY: up down dev install build test test-watch lint typecheck check \
         db-generate db-migrate db-push db-studio \
         prod-build prod-up prod-down prod-logs \
-        shell clean help
+        shell clean vapid-keys help
 
 # ==============================================================================
 # 開発環境 (docker-compose.dev.yml)
@@ -96,6 +96,9 @@ prod-logs: ## 本番ログ表示
 # ==============================================================================
 # ユーティリティ
 # ==============================================================================
+
+vapid-keys: ## VAPID鍵ペア生成
+	$(RUN) npx web-push generate-vapid-keys
 
 clean: ## ビルド成果物削除 (コンテナ内)
 	$(RUN) rm -rf .next dist tsconfig.tsbuildinfo

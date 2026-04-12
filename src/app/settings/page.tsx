@@ -59,6 +59,10 @@ export default function SettingsPage() {
   const [xHasClientId, setXHasClientId] = useState(false);
   const [xSaving, setXSaving] = useState(false);
   const [xMessage, setXMessage] = useState<string | null>(null);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
+  const [pushSupported, setPushSupported] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -70,6 +74,16 @@ export default function SettingsPage() {
         return r.json();
       })
       .then((d) => d && setSettings(d));
+    // Push通知状態チェック
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      setPushSupported(true);
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.pushManager.getSubscription().then((sub) => {
+          setPushEnabled(!!sub);
+        });
+      });
+    }
+
     fetch("/api/x/status")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -277,6 +291,79 @@ export default function SettingsPage() {
           </a>
           {message && <span className="text-sm" style={{ color: "var(--muted)" }}>{message}</span>}
         </div>
+
+        {/* プッシュ通知 */}
+        {pushSupported && (
+          <div className="space-y-3 border-t pt-6" style={{ borderColor: "var(--card-border)" }}>
+            <h2 className="text-lg font-medium">プッシュ通知</h2>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={async () => {
+                  setPushLoading(true);
+                  setPushMessage(null);
+                  try {
+                    if (pushEnabled) {
+                      // 無効化
+                      const reg = await navigator.serviceWorker.ready;
+                      const sub = await reg.pushManager.getSubscription();
+                      if (sub) {
+                        await sub.unsubscribe();
+                        await fetch("/api/push/unsubscribe", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ endpoint: sub.endpoint }),
+                        });
+                      }
+                      setPushEnabled(false);
+                      setPushMessage("通知を無効にしました");
+                    } else {
+                      // 有効化
+                      const permission = await Notification.requestPermission();
+                      if (permission !== "granted") {
+                        setPushMessage("通知の許可が必要です");
+                        setPushLoading(false);
+                        return;
+                      }
+                      const vapidRes = await fetch("/api/push/vapid");
+                      const { publicKey } = await vapidRes.json();
+                      if (!publicKey) {
+                        setPushMessage("VAPID鍵が未設定です");
+                        setPushLoading(false);
+                        return;
+                      }
+                      const reg = await navigator.serviceWorker.ready;
+                      const sub = await reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: publicKey,
+                      });
+                      const json = sub.toJSON();
+                      await fetch("/api/push/subscribe", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          endpoint: sub.endpoint,
+                          keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
+                        }),
+                      });
+                      setPushEnabled(true);
+                      setPushMessage("通知を有効にしました");
+                    }
+                  } catch (e) {
+                    setPushMessage("エラーが発生しました");
+                    console.error(e);
+                  }
+                  setPushLoading(false);
+                }}
+                disabled={pushLoading}
+                className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+              >
+                {pushLoading ? "処理中..." : pushEnabled ? "通知を無効にする" : "通知を有効にする"}
+              </button>
+              {pushMessage && <span className="text-sm" style={{ color: "var(--muted)" }}>{pushMessage}</span>}
+            </div>
+          </div>
+        )}
 
         {/* X (Twitter) 連携 */}
         <div className="space-y-3 border-t pt-6" style={{ borderColor: "var(--card-border)" }}>
