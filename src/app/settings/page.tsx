@@ -54,6 +54,11 @@ export default function SettingsPage() {
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [xClientId, setXClientId] = useState("");
+  const [xConnected, setXConnected] = useState(false);
+  const [xHasClientId, setXHasClientId] = useState(false);
+  const [xSaving, setXSaving] = useState(false);
+  const [xMessage, setXMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -65,6 +70,14 @@ export default function SettingsPage() {
         return r.json();
       })
       .then((d) => d && setSettings(d));
+    fetch("/api/x/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) {
+          setXConnected(d.connected);
+          setXHasClientId(d.hasClientId);
+        }
+      });
   }, [router]);
 
   if (!settings) return <p className="p-6 text-sm">Loading...</p>;
@@ -263,6 +276,84 @@ export default function SettingsPage() {
             OPMLエクスポート
           </a>
           {message && <span className="text-sm" style={{ color: "var(--muted)" }}>{message}</span>}
+        </div>
+
+        {/* X (Twitter) 連携 */}
+        <div className="space-y-3 border-t pt-6" style={{ borderColor: "var(--card-border)" }}>
+          <h2 className="text-lg font-medium">X (Twitter) 連携</h2>
+          <div>
+            <label className="mb-1 block text-sm font-medium">X Client ID</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder={xHasClientId ? "(設定済み) 変更する場合のみ入力" : "未設定"}
+                value={xClientId}
+                onChange={(e) => setXClientId(e.target.value)}
+                className="flex-1 rounded border px-3 py-2"
+                style={inputStyle}
+              />
+              <button
+                onClick={async () => {
+                  if (!xClientId) return;
+                  setXSaving(true);
+                  setXMessage(null);
+                  const res = await fetch("/api/settings", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ xClientId }),
+                  });
+                  setXSaving(false);
+                  if (res.ok) {
+                    setXClientId("");
+                    setXHasClientId(true);
+                    setXMessage("Client ID を保存しました");
+                  } else {
+                    setXMessage("保存失敗");
+                  }
+                }}
+                disabled={xSaving || !xClientId}
+                className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+              >
+                保存
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {xConnected ? (
+              <>
+                <span className="text-sm" style={{ color: "var(--muted)" }}>連携済み</span>
+                <button
+                  onClick={async () => {
+                    setXSaving(true);
+                    setXMessage(null);
+                    const res = await fetch("/api/x/disconnect", { method: "POST" });
+                    setXSaving(false);
+                    if (res.ok) {
+                      setXConnected(false);
+                      setXMessage("連携を解除しました");
+                    } else {
+                      setXMessage("解除失敗");
+                    }
+                  }}
+                  disabled={xSaving}
+                  className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50"
+                  style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                >
+                  連携解除
+                </button>
+              </>
+            ) : (
+              <a
+                href="/api/x/auth"
+                className={`rounded px-3 py-2 text-sm font-medium ${!xHasClientId ? "pointer-events-none opacity-50" : ""}`}
+                style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+              >
+                Xと連携する
+              </a>
+            )}
+            {xMessage && <span className="text-sm" style={{ color: "var(--muted)" }}>{xMessage}</span>}
+          </div>
         </div>
       </section>
     </main>

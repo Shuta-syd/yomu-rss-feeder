@@ -6,7 +6,7 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' https: data:",
   "font-src 'self'",
-  "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://api.anthropic.com",
+  "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://api.anthropic.com https://api.x.com",
 ].join("; ");
 
 const nextConfig: NextConfig = {

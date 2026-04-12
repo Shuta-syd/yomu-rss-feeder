@@ -88,6 +88,7 @@ export interface SettingsUpdate {
   geminiModelStage2?: string;
   theme?: Settings["theme"];
   autoMarkAsRead?: boolean;
+  xClientId?: string;
 }
 
 function updateApiKey(dbKey: string, value: string | null | undefined): void {
@@ -111,6 +112,7 @@ export function updateSettings(input: SettingsUpdate): Settings {
   if (input.autoMarkAsRead !== undefined) {
     set("auto_mark_as_read", input.autoMarkAsRead ? "true" : "false");
   }
+  if (input.xClientId) set("x_client_id", input.xClientId);
   return getSettings();
 }
 

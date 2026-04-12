@@ -23,6 +23,7 @@ const bodySchema = z.object({
   geminiModelStage2: z.string().optional(),
   theme: z.enum(["light", "dark", "system"]).optional(),
   autoMarkAsRead: z.boolean().optional(),
+  xClientId: z.string().optional(),
 });
 
 export async function PUT(req: NextRequest) {
