@@ -73,7 +73,42 @@ export const articles = sqliteTable(
   ],
 );
 
+export const xLikes = sqliteTable(
+  "x_likes",
+  {
+    id: text("id").primaryKey(), // tweet ID
+    authorName: text("author_name").notNull(),
+    authorUsername: text("author_username").notNull(),
+    authorProfileImageUrl: text("author_profile_image_url"),
+    text: text("text").notNull(),
+    likedAt: integer("liked_at").notNull(), // epoch ms
+    tweetCreatedAt: integer("tweet_created_at"),
+    urls: text("urls"), // JSON array of expanded URLs
+    mediaUrls: text("media_urls"), // JSON array
+    replyCount: integer("reply_count"),
+    retweetCount: integer("retweet_count"),
+    likeCount: integer("like_count"),
+    createdAt: integer("created_at")
+      .notNull()
+      .$defaultFn(() => Date.now()),
+  },
+  (table) => [index("idx_x_likes_liked_at").on(table.likedAt)],
+);
+
+export const xAnalyses = sqliteTable("x_analyses", {
+  id: text("id").primaryKey(), // UUID v7
+  periodStart: integer("period_start").notNull(),
+  periodEnd: integer("period_end").notNull(),
+  likeCount: integer("like_count").notNull(),
+  summaryJson: text("summary_json").notNull(), // AI分析結果JSON
+  createdAt: integer("created_at")
+    .notNull()
+    .$defaultFn(() => Date.now()),
+});
+
 export type Feed = typeof feeds.$inferSelect;
 export type NewFeed = typeof feeds.$inferInsert;
 export type Article = typeof articles.$inferSelect;
 export type NewArticle = typeof articles.$inferInsert;
+export type XLike = typeof xLikes.$inferSelect;
+export type XAnalysis = typeof xAnalyses.$inferSelect;
