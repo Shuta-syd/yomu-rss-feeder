@@ -4,11 +4,7 @@ import { db } from "@/lib/db";
 import { articles } from "@/lib/db/schema";
 import { withAuth, jsonError } from "@/lib/api-helpers";
 import { getSettings } from "@/lib/settings";
-import {
-  geminiChatStream,
-  GeminiBlockedError,
-  GeminiNoApiKeyError,
-} from "@/lib/llm/gemini";
+import { createProvider, LLMNoApiKeyError } from "@/lib/llm/provider";
 import { STAGE2_SYSTEM, stage2UserPrompt } from "@/lib/llm/prompts";
 import { parseAndValidate, stage2Schema } from "@/lib/llm/parse-response";
 
@@ -26,8 +22,15 @@ export async function POST(
     }
 
     const settings = getSettings();
-    if (!settings.hasGeminiApiKey) {
-      return jsonError(400, "Gemini API key is not configured");
+
+    let provider;
+    try {
+      provider = createProvider(settings.stage2Provider, settings.geminiModelStage2);
+    } catch (e) {
+      if (e instanceof LLMNoApiKeyError) {
+        return jsonError(400, `${settings.stage2Provider} API key is not configured`);
+      }
+      throw e;
     }
 
     if (!article.contentPlain || article.contentPlain.length < 20) {
@@ -48,8 +51,7 @@ export async function POST(
 
         try {
           let fullContent = "";
-          const gen = geminiChatStream({
-            model: settings.geminiModelStage2,
+          const gen = provider.chatStream({
             systemPrompt: STAGE2_SYSTEM,
             userPrompt: stage2UserPrompt(article.title, article.contentPlain!, article.contentHtml),
             maxOutputTokens: 8192,
