@@ -14,10 +14,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja" suppressHydrationWarning>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#2dd4bf" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+      </head>
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
         </ThemeProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if("serviceWorker"in navigator){navigator.serviceWorker.register("/sw.js")}`,
+          }}
+        />
       </body>
     </html>
   );
