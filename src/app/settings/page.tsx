@@ -151,6 +151,14 @@ export default function SettingsPage() {
           >
             {saving ? "保存中..." : "保存"}
           </button>
+          <a
+            href="/api/feeds/export"
+            download="yomu-feeds.opml"
+            className="rounded px-4 py-2 text-sm font-medium"
+            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+          >
+            OPMLエクスポート
+          </a>
           {message && <span className="text-sm" style={{ color: "var(--muted)" }}>{message}</span>}
         </div>
       </section>
