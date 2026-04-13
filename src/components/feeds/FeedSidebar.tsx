@@ -90,6 +90,13 @@ export function FeedSidebar({
           <span>すべて</span>
           <span style={{ color: "var(--muted)" }}>{totalUnread}</span>
         </button>
+        <a
+          href="/x"
+          className="flex w-full items-center rounded px-2 py-1"
+          style={{ color: "var(--muted)" }}
+        >
+          X いいね
+        </a>
         {categories.map((cat) => (
           <CategoryGroup
             key={cat}

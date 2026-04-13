@@ -15,10 +15,15 @@ export async function GET() {
 
 const bodySchema = z.object({
   geminiApiKey: z.string().nullable().optional(),
+  openaiApiKey: z.string().nullable().optional(),
+  anthropicApiKey: z.string().nullable().optional(),
+  stage1Provider: z.enum(["gemini", "openai", "anthropic"]).optional(),
+  stage2Provider: z.enum(["gemini", "openai", "anthropic"]).optional(),
   geminiModelStage1: z.string().optional(),
   geminiModelStage2: z.string().optional(),
   theme: z.enum(["light", "dark", "system"]).optional(),
   autoMarkAsRead: z.boolean().optional(),
+  xClientId: z.string().optional(),
 });
 
 export async function PUT(req: NextRequest) {

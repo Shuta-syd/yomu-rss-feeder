@@ -1,45 +1,5 @@
-import { getDecryptedApiKey } from "../settings";
-
-export interface GeminiChatParams {
-  model: string;
-  systemPrompt: string;
-  userPrompt: string;
-  temperature?: number;
-  maxOutputTokens?: number;
-}
-
-export interface GeminiChatResult {
-  content: string;
-  inputTokens: number;
-  outputTokens: number;
-}
-
-export class GeminiApiError extends Error {
-  constructor(
-    public status: number,
-    public body: string,
-  ) {
-    super(`Gemini API error ${status}: ${body.slice(0, 200)}`);
-  }
-}
-
-export class GeminiBlockedError extends Error {
-  constructor(public reason: unknown) {
-    super(`Gemini safety block: ${JSON.stringify(reason)}`);
-  }
-}
-
-export class GeminiEmptyResponseError extends Error {
-  constructor() {
-    super("Gemini returned empty response");
-  }
-}
-
-export class GeminiNoApiKeyError extends Error {
-  constructor() {
-    super("Gemini API key is not configured");
-  }
-}
+import type { LLMProvider, ChatParams, ChatResult } from "./provider";
+import { LLMApiError, LLMBlockedError, LLMEmptyResponseError } from "./provider";
 
 interface GeminiResponse {
   candidates?: {
@@ -51,104 +11,104 @@ interface GeminiResponse {
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
 }
 
-export async function geminiChat(params: GeminiChatParams): Promise<GeminiChatResult> {
-  const apiKey = getDecryptedApiKey();
-  if (!apiKey) throw new GeminiNoApiKeyError();
+export class GeminiProvider implements LLMProvider {
+  readonly name = "gemini";
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(params.model)}:generateContent?key=${apiKey}`;
+  constructor(
+    private apiKey: string,
+    private model: string,
+  ) {}
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: params.systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: params.userPrompt }] }],
-      generationConfig: {
-        temperature: params.temperature ?? 0.3,
-        maxOutputTokens: params.maxOutputTokens ?? 1024,
-        responseMimeType: "application/json",
-      },
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  async chat(params: ChatParams): Promise<ChatResult> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent?key=${this.apiKey}`;
 
-  if (!res.ok) {
-    throw new GeminiApiError(res.status, await res.text());
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: params.systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: params.userPrompt }] }],
+        generationConfig: {
+          temperature: params.temperature ?? 0.3,
+          maxOutputTokens: params.maxOutputTokens ?? 1024,
+          responseMimeType: "application/json",
+        },
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!res.ok) {
+      throw new LLMApiError(res.status, await res.text());
+    }
+
+    const data = (await res.json()) as GeminiResponse;
+
+    if (!data.candidates || data.candidates.length === 0) {
+      throw new LLMBlockedError(data.promptFeedback?.blockReason ?? "UNKNOWN");
+    }
+
+    const candidate = data.candidates[0]!;
+    if (candidate.finishReason === "SAFETY") {
+      throw new LLMBlockedError(candidate.safetyRatings);
+    }
+
+    const content = candidate.content?.parts?.[0]?.text;
+    if (!content) throw new LLMEmptyResponseError();
+
+    return {
+      content,
+      inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
+      outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+    };
   }
 
-  const data = (await res.json()) as GeminiResponse;
+  async *chatStream(params: ChatParams): AsyncGenerator<string> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:streamGenerateContent?alt=sse&key=${this.apiKey}`;
 
-  if (!data.candidates || data.candidates.length === 0) {
-    throw new GeminiBlockedError(data.promptFeedback?.blockReason ?? "UNKNOWN");
-  }
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: params.systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: params.userPrompt }] }],
+        generationConfig: {
+          temperature: params.temperature ?? 0.3,
+          maxOutputTokens: params.maxOutputTokens ?? 4096,
+          responseMimeType: "application/json",
+        },
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
 
-  const candidate = data.candidates[0]!;
-  if (candidate.finishReason === "SAFETY") {
-    throw new GeminiBlockedError(candidate.safetyRatings);
-  }
+    if (!res.ok) {
+      throw new LLMApiError(res.status, await res.text());
+    }
 
-  const content = candidate.content?.parts?.[0]?.text;
-  if (!content) throw new GeminiEmptyResponseError();
+    const reader = res.body?.getReader();
+    if (!reader) throw new LLMEmptyResponseError();
 
-  return {
-    content,
-    inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
-    outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
-  };
-}
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-/**
- * Gemini streaming API — テキストチャンクをyieldする
- */
-export async function* geminiChatStream(params: GeminiChatParams): AsyncGenerator<string> {
-  const apiKey = getDecryptedApiKey();
-  if (!apiKey) throw new GeminiNoApiKeyError();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(params.model)}:streamGenerateContent?alt=sse&key=${apiKey}`;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: params.systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: params.userPrompt }] }],
-      generationConfig: {
-        temperature: params.temperature ?? 0.3,
-        maxOutputTokens: params.maxOutputTokens ?? 4096,
-        responseMimeType: "application/json",
-      },
-    }),
-    signal: AbortSignal.timeout(120_000),
-  });
-
-  if (!res.ok) {
-    throw new GeminiApiError(res.status, await res.text());
-  }
-
-  const reader = res.body?.getReader();
-  if (!reader) throw new GeminiEmptyResponseError();
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      const jsonStr = line.slice(6).trim();
-      if (!jsonStr) continue;
-      try {
-        const data = JSON.parse(jsonStr) as GeminiResponse;
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) yield text;
-      } catch {
-        // skip malformed SSE chunks
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+        try {
+          const data = JSON.parse(jsonStr) as GeminiResponse;
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) yield text;
+        } catch {
+          // skip malformed SSE chunks
+        }
       }
     }
   }

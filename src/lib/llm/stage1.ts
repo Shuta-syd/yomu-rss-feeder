@@ -2,7 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { articles } from "../db/schema";
 import { getSettings } from "../settings";
-import { geminiChat, GeminiBlockedError, GeminiNoApiKeyError } from "./gemini";
+import { createProvider, LLMBlockedError, LLMNoApiKeyError } from "./provider";
 import { STAGE1_SYSTEM, stage1UserPrompt } from "./prompts";
 import { parseAndValidate, stage1Schema } from "./parse-response";
 
@@ -12,10 +12,19 @@ const RATE_LIMIT_MS = 500;
 export async function processStage1ForArticles(articleIds: string[]): Promise<void> {
   if (articleIds.length === 0) return;
   const settings = getSettings();
-  if (!settings.hasGeminiApiKey) {
-    console.log("[yomu] stage1: no API key, skipping");
-    return;
-  }
+
+  const provider = (() => {
+    try {
+      return createProvider(settings.stage1Provider, settings.geminiModelStage1);
+    } catch (e) {
+      if (e instanceof LLMNoApiKeyError) {
+        console.log(`[yomu] stage1: no API key for ${settings.stage1Provider}, skipping`);
+        return null;
+      }
+      throw e;
+    }
+  })();
+  if (!provider) return;
 
   const rows = db
     .select()
@@ -36,8 +45,7 @@ export async function processStage1ForArticles(articleIds: string[]): Promise<vo
       .run();
 
     try {
-      const result = await geminiChat({
-        model: settings.geminiModelStage1,
+      const result = await provider.chat({
         systemPrompt: STAGE1_SYSTEM,
         userPrompt: stage1UserPrompt(article.title, article.contentPlain ?? ""),
       });
@@ -55,14 +63,14 @@ export async function processStage1ForArticles(articleIds: string[]): Promise<vo
         .where(eq(articles.id, article.id))
         .run();
     } catch (e) {
-      if (e instanceof GeminiNoApiKeyError) {
+      if (e instanceof LLMNoApiKeyError) {
         db.update(articles)
           .set({ aiStage1Status: "pending" })
           .where(eq(articles.id, article.id))
           .run();
         break;
       }
-      const status = e instanceof GeminiBlockedError ? "skipped" : "failed";
+      const status = e instanceof LLMBlockedError ? "skipped" : "failed";
       db.update(articles)
         .set({
           aiStage1Status: status,

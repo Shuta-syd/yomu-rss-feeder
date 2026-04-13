@@ -3,10 +3,11 @@ import type { NextConfig } from "next";
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
+  "worker-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' https: data:",
   "font-src 'self'",
-  "connect-src 'self' https://generativelanguage.googleapis.com",
+  "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://api.anthropic.com https://api.x.com",
 ].join("; ");
 
 const nextConfig: NextConfig = {
