@@ -6,6 +6,7 @@ import {
   setPendingAuth,
   buildAuthUrl,
 } from "@/lib/x/auth";
+import { getPublicOrigin } from "@/lib/public-origin";
 
 export async function GET(req: NextRequest) {
   return withAuth(async () => {
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
     const { codeVerifier, codeChallenge, state } = generatePKCE();
     setPendingAuth(state, codeVerifier);
 
-    const origin = new URL(req.url).origin;
+    const origin = getPublicOrigin(req);
     const redirectUri = `${origin}/api/x/callback`;
     const authUrl = buildAuthUrl(clientId, redirectUri, codeChallenge, state);
 

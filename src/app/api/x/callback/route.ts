@@ -8,20 +8,21 @@ import {
   setXAccessToken,
   setXRefreshToken,
 } from "@/lib/x/auth";
+import { getPublicOrigin } from "@/lib/public-origin";
 
 export async function GET(req: NextRequest) {
+  const origin = getPublicOrigin(req);
+
   // 認証チェック (cookieが付いている前提だが、なければ/loginへ)
   try {
     await requireAuth();
   } catch {
-    const origin = new URL(req.url).origin;
     return NextResponse.redirect(`${origin}/login`);
   }
 
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const origin = url.origin;
 
   if (!code || !state) {
     return NextResponse.json(
