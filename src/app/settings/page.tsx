@@ -98,6 +98,7 @@ export default function SettingsPage() {
   const [pushLoading, setPushLoading] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
   const [notifSaving, setNotifSaving] = useState(false);
+  const [opmlImporting, setOpmlImporting] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -264,6 +265,23 @@ export default function SettingsPage() {
       setToast("連携を解除しました");
     } else {
       setToast("解除失敗");
+    }
+  }
+
+  async function importOpml(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setOpmlImporting(true);
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/feeds/import", { method: "POST", body: form });
+    setOpmlImporting(false);
+    e.target.value = ""; // 同じファイルを再選択できるようにリセット
+    if (res.ok) {
+      const data = await res.json();
+      setToast(`インポート完了: ${data.imported}件追加、${data.skipped}件重複`);
+    } else {
+      setToast("インポート失敗");
     }
   }
 
@@ -531,15 +549,30 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-3">
-            <h2 className={sectionTitleCls}>エクスポート</h2>
-            <a
-              href="/api/feeds/export"
-              download="yomu-feeds.opml"
-              className="inline-block rounded px-4 py-2 text-sm font-medium"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-            >
-              OPMLエクスポート
-            </a>
+            <h2 className={sectionTitleCls}>インポート / エクスポート</h2>
+            <div className="flex flex-wrap gap-2">
+              <label
+                className="inline-block cursor-pointer rounded px-4 py-2 text-sm font-medium"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              >
+                {opmlImporting ? "インポート中..." : "OPMLインポート"}
+                <input
+                  type="file"
+                  accept=".opml,.xml,application/xml,text/xml"
+                  className="hidden"
+                  disabled={opmlImporting}
+                  onChange={importOpml}
+                />
+              </label>
+              <a
+                href="/api/feeds/export"
+                download="yomu-feeds.opml"
+                className="inline-block rounded px-4 py-2 text-sm font-medium"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              >
+                OPMLエクスポート
+              </a>
+            </div>
           </div>
         </section>
       )}
