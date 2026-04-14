@@ -11,6 +11,34 @@ const FETCH_TIMEOUT = 15_000;
 const MAX_HTML_SIZE = 2 * 1024 * 1024; // 2MB
 
 /**
+ * HTTPヘッダ → HTML meta → UTF-8 の順に文字コードを検出してデコードする。
+ * 日本語サイト (Shift_JIS / EUC-JP) のモジバケ対策。
+ */
+function decodeHtml(buf: ArrayBuffer, contentType: string): string {
+  const fromHeader = /charset=([^;\s]+)/i.exec(contentType)?.[1]?.toLowerCase().replace(/["']/g, "");
+  const tryDecode = (label: string): string | null => {
+    try {
+      return new TextDecoder(label, { fatal: false }).decode(buf);
+    } catch {
+      return null;
+    }
+  };
+  if (fromHeader && fromHeader !== "utf-8") {
+    const decoded = tryDecode(fromHeader);
+    if (decoded) return decoded;
+  }
+  // 先頭2KBをlatin1としてサンプルし、<meta charset=...>を拾う
+  const sample = new TextDecoder("latin1").decode(buf.slice(0, 2048));
+  const fromMeta =
+    /<meta[^>]+charset\s*=\s*["']?([a-zA-Z0-9_-]+)/i.exec(sample)?.[1]?.toLowerCase();
+  if (fromMeta && fromMeta !== "utf-8") {
+    const decoded = tryDecode(fromMeta);
+    if (decoded) return decoded;
+  }
+  return new TextDecoder("utf-8", { fatal: false }).decode(buf);
+}
+
+/**
  * 元記事URLからフルコンテンツを取得する。
  * RSSが抜粋のみの場合に使用。
  */
@@ -32,8 +60,9 @@ export async function fetchFullContent(
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("text/html")) return null;
 
-    const html = await res.text();
-    if (html.length > MAX_HTML_SIZE) return null;
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > MAX_HTML_SIZE) return null;
+    const html = decodeHtml(buf, contentType);
 
     const dom = new JSDOM(html, { url, virtualConsole: silentConsole });
     const reader = new Readability(dom.window.document);
