@@ -37,4 +37,45 @@ html,
 body {
   background: var(--bg);
   color: var(--fg);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+button,
+a {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* iOS風のプレス時フィードバック */
+button:active:not(:disabled),
+a:active {
+  transform: scale(0.97);
+}
+button,
+a {
+  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease-out;
+}
+
+/* モバイル画面切替のスライドアニメーション */
+@keyframes slide-in-right {
+  from { transform: translateX(8%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-8%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.mobile-panel-forward {
+  animation: slide-in-right 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.mobile-panel-back {
+  animation: slide-in-left 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* スクロールをスムーズに */
+* {
+  -webkit-overflow-scrolling: touch;
 }

@@ -23,6 +23,13 @@ export default function FeedsPage() {
   const [aiStatus, setAiStatus] = useState<{ pending: number; processing: number; failed: number; currentTitle: string | null; currentFeedTitle: string | null } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileView, setMobileView] = useState<"sidebar" | "list" | "detail">("list");
+  const [slideDirection, setSlideDirection] = useState<"forward" | "back">("forward");
+
+  const viewOrder = { sidebar: 0, list: 1, detail: 2 } as const;
+  function goToMobileView(next: "sidebar" | "list" | "detail") {
+    setSlideDirection(viewOrder[next] > viewOrder[mobileView] ? "forward" : "back");
+    setMobileView(next);
+  }
   const resizing = useRef(false);
 
   useEffect(() => {
@@ -124,7 +131,7 @@ export default function FeedsPage() {
 
   function handleSelect(a: ArticleDTO) {
     setSelected(a);
-    if (isMobile) setMobileView("detail");
+    if (isMobile) goToMobileView("detail");
     if (!a.isRead) {
       fetch(`/api/articles/${a.id}`, {
         method: "PATCH",
@@ -145,17 +152,21 @@ export default function FeedsPage() {
   const showSidebar = !isMobile || mobileView === "sidebar";
   const showList = !isMobile || mobileView === "list";
   const showDetail = !isMobile || mobileView === "detail";
+  const slideClass = isMobile ? (slideDirection === "forward" ? "mobile-panel-forward" : "mobile-panel-back") : "";
 
   return (
     <div className="flex h-screen">
-      <div className={showSidebar ? (isMobile ? "w-full" : "") : "hidden"}>
+      <div
+        key={isMobile ? `sb-${mobileView}` : "sb"}
+        className={`${showSidebar ? (isMobile ? `w-full ${slideClass}` : "") : "hidden"}`}
+      >
         <FeedSidebar
           feeds={feeds}
           selectedFeedId={selectedFeedId}
           onSelect={(id) => {
             setSelectedFeedId(id);
             setSelected(null);
-            if (isMobile) setMobileView("list");
+            if (isMobile) goToMobileView("list");
           }}
           onAddFeed={() => setAddOpen(true)}
           onSync={sync}
@@ -172,7 +183,8 @@ export default function FeedsPage() {
         />
       </div>
       <section
-        className={`${showList ? "flex" : "hidden"} ${isMobile ? "w-full" : `shrink-0 ${listWidth === null ? "w-96" : ""}`} flex-col`}
+        key={isMobile ? `list-${mobileView}` : "list"}
+        className={`${showList ? "flex" : "hidden"} ${isMobile ? `w-full ${slideClass}` : `shrink-0 ${listWidth === null ? "w-96" : ""}`} flex-col`}
         style={!isMobile && listWidth !== null ? { width: listWidth } : undefined}
       >
         <div
@@ -181,7 +193,7 @@ export default function FeedsPage() {
         >
           {isMobile && (
             <button
-              onClick={() => setMobileView("sidebar")}
+              onClick={() => goToMobileView("sidebar")}
               className="rounded px-2 py-1 text-lg"
               style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
               aria-label="フィード一覧"
@@ -239,14 +251,17 @@ export default function FeedsPage() {
           }}
         />
       )}
-      <section className={`${showDetail ? "flex" : "hidden"} ${isMobile ? "w-full" : "flex-1"} flex-col overflow-hidden`}>
+      <section
+        key={isMobile ? `detail-${mobileView}` : "detail"}
+        className={`${showDetail ? "flex" : "hidden"} ${isMobile ? `w-full ${slideClass}` : "flex-1"} flex-col overflow-hidden`}
+      >
         {isMobile && (
           <div
             className="flex items-center gap-2 border-b p-2"
             style={{ borderColor: "var(--card-border)" }}
           >
             <button
-              onClick={() => setMobileView("list")}
+              onClick={() => goToMobileView("list")}
               className="rounded px-2 py-1 text-sm"
               style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
               aria-label="戻る"
