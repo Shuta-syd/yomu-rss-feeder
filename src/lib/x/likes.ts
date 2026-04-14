@@ -19,7 +19,8 @@ export async function fetchAndStoreLikes(maxResults: number = 100): Promise<numb
     max_results: String(Math.min(maxResults, 100)),
     "tweet.fields": "created_at,public_metrics,entities,attachments",
     "user.fields": "name,username,profile_image_url",
-    expansions: "author_id",
+    "media.fields": "type,url,preview_image_url,width,height",
+    expansions: "author_id,attachments.media_keys",
   });
   const likesRes = await fetch(`https://api.x.com/2/users/${userId}/liked_tweets?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -29,12 +30,36 @@ export async function fetchAndStoreLikes(maxResults: number = 100): Promise<numb
 
   const tweets = likesData.data ?? [];
   const users = likesData.includes?.users ?? [];
+  const media = likesData.includes?.media ?? [];
   const userMap = new Map(users.map((u: any) => [u.id, u]));
+  const mediaMap = new Map(media.map((m: any) => [m.media_key, m]));
 
   let stored = 0;
   const now = Date.now();
   for (const tweet of tweets) {
     const author = userMap.get(tweet.author_id) as any;
+
+    // URLs: t.co -> expanded + display + title/description/images
+    const urlEntities = (tweet.entities?.urls ?? []).map((u: any) => ({
+      url: u.url,
+      expanded: u.expanded_url,
+      display: u.display_url,
+      title: u.title ?? null,
+      description: u.description ?? null,
+      image: u.images?.[0]?.url ?? null,
+    }));
+
+    // Media attachments
+    const mediaItems = (tweet.attachments?.media_keys ?? [])
+      .map((key: string) => mediaMap.get(key))
+      .filter(Boolean)
+      .map((m: any) => ({
+        type: m.type,
+        url: m.url ?? m.preview_image_url ?? null,
+        width: m.width ?? null,
+        height: m.height ?? null,
+      }));
+
     const result = db.insert(xLikes).values({
       id: tweet.id,
       authorName: author?.name ?? "unknown",
@@ -43,8 +68,8 @@ export async function fetchAndStoreLikes(maxResults: number = 100): Promise<numb
       text: tweet.text,
       likedAt: now,
       tweetCreatedAt: tweet.created_at ? Date.parse(tweet.created_at) : null,
-      urls: tweet.entities?.urls ? JSON.stringify(tweet.entities.urls.map((u: any) => u.expanded_url)) : null,
-      mediaUrls: null, // X API v2 media handling is complex, skip for now
+      urls: urlEntities.length ? JSON.stringify(urlEntities) : null,
+      mediaUrls: mediaItems.length ? JSON.stringify(mediaItems) : null,
       replyCount: tweet.public_metrics?.reply_count ?? null,
       retweetCount: tweet.public_metrics?.retweet_count ?? null,
       likeCount: tweet.public_metrics?.like_count ?? null,

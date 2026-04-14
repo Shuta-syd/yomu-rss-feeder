@@ -329,7 +329,7 @@ export default function FeedsPage() {
               </a>
             </div>
           ) : (
-            <div className="h-full overflow-y-auto p-3">
+            <div className="h-full overflow-y-auto">
               <XLikesList likes={likes} loading={likesLoading} />
             </div>
           )}
