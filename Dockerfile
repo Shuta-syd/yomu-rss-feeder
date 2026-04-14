@@ -41,6 +41,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 # ==============================================================================
 FROM base AS builder
 
+# ビルド時はdevDependencies (Tailwind, TypeScript等) も必要
+ENV NODE_ENV=development
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
