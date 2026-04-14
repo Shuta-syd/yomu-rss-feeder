@@ -75,6 +75,39 @@ src/
 
 詳細設計は [docs/yomu-v1-design.md](docs/yomu-v1-design.md) を参照。
 
+## セルフホストデプロイ (Proxmox等)
+
+1コマンドで環境構築・自動デプロイcron設定まで完了:
+
+```bash
+# サーバー側 (root or sudo)
+curl -fsSL https://raw.githubusercontent.com/<user>/yomu-rss-feeder/main/scripts/setup.sh | bash
+```
+
+または clone してから:
+
+```bash
+git clone https://github.com/<user>/yomu-rss-feeder.git /opt/yomu
+cd /opt/yomu
+./scripts/setup.sh
+```
+
+`setup.sh` は以下を実行:
+- Docker / git インストール (未導入時)
+- `/opt/yomu` に clone
+- `.env` 自動生成 (ENCRYPTION_KEY、VAPID鍵)
+- `docker compose up -d --build`
+- 5分おきに `git pull` + 再ビルドする cron を登録
+
+以降、ローカルで `git push` するだけでサーバー側に自動反映されます。
+
+### 手動デプロイ
+
+```bash
+cd /opt/yomu
+./scripts/deploy.sh   # 変更があれば pull + rebuild
+```
+
 ## 開発コマンド
 
 ```bash
