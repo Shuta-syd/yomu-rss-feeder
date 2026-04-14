@@ -15,6 +15,8 @@ const csp = [
 const nextConfig: NextConfig = {
   output: "standalone",
   serverExternalPackages: ["better-sqlite3", "jsdom", "@mozilla/readability"],
+  // dev mode でのクロスオリジンアクセスを許可 (本番では使われない)
+  allowedDevOrigins: (process.env.ALLOWED_DEV_ORIGINS ?? "").split(",").filter(Boolean),
   async headers() {
     return [
       {

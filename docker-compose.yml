@@ -17,6 +17,7 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      ALLOWED_DEV_ORIGINS: ${ALLOWED_DEV_ORIGINS:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
