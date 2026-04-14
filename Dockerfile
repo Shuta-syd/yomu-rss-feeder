@@ -90,7 +90,7 @@ COPY --from=builder --chown=node:node /app/drizzle ./drizzle
 COPY --from=builder --chown=node:node /app/entrypoint.sh ./entrypoint.sh
 
 RUN mkdir -p /data /app/.next && \
-    chown -R node:node /data /app && \
+    chown node:node /data /app /app/.next && \
     chmod +x ./entrypoint.sh
 VOLUME ["/data"]
 
