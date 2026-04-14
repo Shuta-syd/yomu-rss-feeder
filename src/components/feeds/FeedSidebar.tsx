@@ -192,10 +192,13 @@ export function FeedSidebar({
             </button>
             <a
               href="/x"
-              className="flex w-full items-center rounded px-2 py-1"
+              className="flex w-full items-center gap-2 rounded px-2 py-1"
               style={{ color: "var(--muted)" }}
             >
-              X いいね
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="currentColor" aria-hidden>
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg>
+              <span>いいね</span>
             </a>
           </>
         )}
@@ -327,7 +330,7 @@ function CategoryGroup({
 
   return (
     <div
-      className="mt-3 rounded transition-colors"
+      className="mt-3 rounded border-t pt-2 transition-colors"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -335,6 +338,7 @@ function CategoryGroup({
         background: dropTarget ? "var(--accent-subtle)" : "transparent",
         outline: dropTarget ? "2px dashed var(--accent)" : "none",
         outlineOffset: "-2px",
+        borderColor: "var(--card-border)",
       }}
     >
       {selectMode ? (
