@@ -25,11 +25,11 @@ else
   echo "[1/6] Docker: OK ($(docker --version))"
 fi
 
-if ! command -v git >/dev/null 2>&1; then
-  echo "[1/6] gitをインストール..."
-  if command -v apt >/dev/null 2>&1; then apt update && apt install -y git
-  elif command -v dnf >/dev/null 2>&1; then dnf install -y git
-  else echo "git を手動インストールしてください"; exit 1
+if ! command -v git >/dev/null 2>&1 || ! command -v make >/dev/null 2>&1; then
+  echo "[1/6] git, make をインストール..."
+  if command -v apt >/dev/null 2>&1; then apt update && apt install -y git make
+  elif command -v dnf >/dev/null 2>&1; then dnf install -y git make
+  else echo "git, make を手動インストールしてください"; exit 1
   fi
 fi
 
