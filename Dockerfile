@@ -41,18 +41,18 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 # ==============================================================================
 FROM base AS builder
 
-# ビルド時はdevDependencies (Tailwind, TypeScript等) も必要
-ENV NODE_ENV=development
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
   && rm -rf /var/lib/apt/lists/*
 
+# NODE_ENV=production のまま devDependencies も入れる (--prod=false)
+# next build は NODE_ENV=production で実行される必要がある
+# (development だと /_global-error のprerenderで useContext が null になる)
 COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile
+    pnpm install --frozen-lockfile --prod=false
 
 COPY . .
 
