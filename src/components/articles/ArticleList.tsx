@@ -65,6 +65,13 @@ export function ArticleList({ articles, selectedId, onSelect }: Props) {
                     />
                   )}
                   {a.isStarred && <span className="text-yellow-500">★</span>}
+                  {a.aiStage1Status === "processing" && (
+                    <span
+                      className="mt-0.5 inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-t-transparent"
+                      style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
+                      title="AI処理中"
+                    />
+                  )}
                   <span
                     className={`line-clamp-2 text-sm leading-snug ${a.isRead ? "" : "font-semibold"}`}
                   >
