@@ -1,7 +1,12 @@
 import createDOMPurify from "dompurify";
-import { JSDOM } from "jsdom";
+import { JSDOM, VirtualConsole } from "jsdom";
 
-const window = new JSDOM("").window;
+const silentConsole = new VirtualConsole();
+silentConsole.on("error", () => {});
+silentConsole.on("warn", () => {});
+silentConsole.on("jsdomError", () => {});
+
+const window = new JSDOM("", { virtualConsole: silentConsole }).window;
 const DOMPurify = createDOMPurify(window as unknown as Window & typeof globalThis);
 
 const ALLOWED_TAGS = [
@@ -53,6 +58,6 @@ export function sanitizeHtml(dirty: string): string {
 }
 
 export function htmlToPlain(html: string): string {
-  const doc = new JSDOM(`<!doctype html><body>${html}</body>`).window.document;
+  const doc = new JSDOM(`<!doctype html><body>${html}</body>`, { virtualConsole: silentConsole }).window.document;
   return (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
 }

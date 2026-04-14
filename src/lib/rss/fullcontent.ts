@@ -1,6 +1,11 @@
-import { JSDOM } from "jsdom";
+import { JSDOM, VirtualConsole } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { sanitizeHtml, htmlToPlain } from "../sanitize";
+
+const silentConsole = new VirtualConsole();
+silentConsole.on("error", () => {});
+silentConsole.on("warn", () => {});
+silentConsole.on("jsdomError", () => {});
 
 const FETCH_TIMEOUT = 15_000;
 const MAX_HTML_SIZE = 2 * 1024 * 1024; // 2MB
@@ -30,7 +35,7 @@ export async function fetchFullContent(
     const html = await res.text();
     if (html.length > MAX_HTML_SIZE) return null;
 
-    const dom = new JSDOM(html, { url });
+    const dom = new JSDOM(html, { url, virtualConsole: silentConsole });
     const reader = new Readability(dom.window.document);
     const article = reader.parse();
     if (!article?.content) return null;
