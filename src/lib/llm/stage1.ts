@@ -7,7 +7,7 @@ import { STAGE1_SYSTEM, STAGE1_SYSTEM_JP, stage1UserPrompt, isJapaneseTitle } fr
 import { parseAndValidate, stage1Schema } from "./parse-response";
 
 const BATCH_TIMEOUT_MS = 5 * 60 * 1000;
-const RATE_LIMIT_MS = 500;
+const RATE_LIMIT_MS = 250;
 
 export async function processStage1ForArticles(articleIds: string[]): Promise<void> {
   if (articleIds.length === 0) return;

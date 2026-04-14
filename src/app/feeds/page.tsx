@@ -20,7 +20,7 @@ export default function FeedsPage() {
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [listWidth, setListWidth] = useState<number | null>(null);
-  const [aiStatus, setAiStatus] = useState<{ pending: number; processing: number; failed: number } | null>(null);
+  const [aiStatus, setAiStatus] = useState<{ pending: number; processing: number; failed: number; currentTitle: string | null; currentFeedTitle: string | null } | null>(null);
   const resizing = useRef(false);
 
   useEffect(() => {
@@ -82,7 +82,7 @@ export default function FeedsPage() {
         const res = await fetch("/api/ai/status");
         if (!res.ok || cancelled) return;
         const data = await res.json();
-        setAiStatus({ pending: data.pending, processing: data.processing, failed: data.failed });
+        setAiStatus({ pending: data.pending, processing: data.processing, failed: data.failed, currentTitle: data.currentTitle, currentFeedTitle: data.currentFeedTitle });
       } catch {}
     }
     poll();
@@ -179,17 +179,26 @@ export default function FeedsPage() {
         </div>
         {aiStatus && (aiStatus.pending > 0 || aiStatus.processing > 0 || aiStatus.failed > 0) && (
           <div
-            className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
+            className="flex flex-col gap-0.5 border-b px-3 py-1.5 text-xs"
             style={{ borderColor: "var(--card-border)", background: "var(--ai-bg)", color: "var(--muted)" }}
           >
-            {aiStatus.processing > 0 && (
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--accent)" }} />
-                <span>処理中 {aiStatus.processing}</span>
-              </span>
+            <div className="flex items-center gap-2">
+              {aiStatus.processing > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--accent)" }} />
+                  <span>処理中 {aiStatus.processing}</span>
+                </span>
+              )}
+              {aiStatus.pending > 0 && <span>待機 {aiStatus.pending}</span>}
+              {aiStatus.failed > 0 && <span style={{ color: "#f87171" }}>失敗 {aiStatus.failed}</span>}
+            </div>
+            {aiStatus.currentTitle && (
+              <div className="truncate" title={aiStatus.currentTitle}>
+                <span style={{ color: "var(--accent)" }}>▸</span>{" "}
+                {aiStatus.currentFeedTitle && <span className="opacity-70">[{aiStatus.currentFeedTitle}]</span>}{" "}
+                {aiStatus.currentTitle}
+              </div>
             )}
-            {aiStatus.pending > 0 && <span>待機 {aiStatus.pending}</span>}
-            {aiStatus.failed > 0 && <span style={{ color: "#f87171" }}>失敗 {aiStatus.failed}</span>}
           </div>
         )}
         <div className="flex-1 overflow-hidden">

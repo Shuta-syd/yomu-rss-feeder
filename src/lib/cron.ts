@@ -25,7 +25,7 @@ export function initCron(): void {
       }
 
       // pending状態の記事があればStage1処理を実行
-      const pendingIds = getPendingStage1Ids(50);
+      const pendingIds = getPendingStage1Ids(200);
       if (pendingIds.length > 0) {
         try {
           await processStage1ForArticles(pendingIds);
