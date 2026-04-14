@@ -134,7 +134,7 @@ export function ArticleDetail({ article, onChange }: Props) {
     <article className="h-full overflow-y-auto">
       {/* ヘッダー */}
       <header
-        className="sticky top-0 z-10 border-b px-4 py-3 md:px-6 md:py-4"
+        className="border-b px-4 py-3 md:px-6 md:py-4"
         style={{ background: "var(--bg)", borderColor: "var(--card-border)" }}
       >
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
