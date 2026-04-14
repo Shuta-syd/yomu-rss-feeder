@@ -60,7 +60,7 @@ export async function fetchAndStoreLikes(maxResults: number = 100): Promise<numb
         height: m.height ?? null,
       }));
 
-    const result = db.insert(xLikes).values({
+    const values = {
       id: tweet.id,
       authorName: author?.name ?? "unknown",
       authorUsername: author?.username ?? "unknown",
@@ -73,7 +73,26 @@ export async function fetchAndStoreLikes(maxResults: number = 100): Promise<numb
       replyCount: tweet.public_metrics?.reply_count ?? null,
       retweetCount: tweet.public_metrics?.retweet_count ?? null,
       likeCount: tweet.public_metrics?.like_count ?? null,
-    }).onConflictDoNothing().run();
+    };
+    // likedAt は上書きしない (初回いいね時刻を保持)
+    const result = db.insert(xLikes)
+      .values(values)
+      .onConflictDoUpdate({
+        target: xLikes.id,
+        set: {
+          authorName: values.authorName,
+          authorUsername: values.authorUsername,
+          authorProfileImageUrl: values.authorProfileImageUrl,
+          text: values.text,
+          tweetCreatedAt: values.tweetCreatedAt,
+          urls: values.urls,
+          mediaUrls: values.mediaUrls,
+          replyCount: values.replyCount,
+          retweetCount: values.retweetCount,
+          likeCount: values.likeCount,
+        },
+      })
+      .run();
     if (result.changes > 0) stored++;
   }
   return stored;
