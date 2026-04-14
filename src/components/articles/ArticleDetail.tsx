@@ -17,12 +17,15 @@ export function ArticleDetail({ article, onChange }: Props) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [streamText, setStreamText] = useState("");
+  const [showTranslation, setShowTranslation] = useState(false);
 
   useEffect(() => {
     setAiError(null);
     setAiLoading(false);
     setStreamText("");
-  }, [article?.id]);
+    // 記事切替時、翻訳があればデフォルトで日本語表示
+    setShowTranslation(!!article?.aiTranslation);
+  }, [article?.id, article?.aiTranslation]);
 
   const runAi = useCallback(async () => {
     if (!article) return;
@@ -241,23 +244,6 @@ export function ArticleDetail({ article, onChange }: Props) {
                 </div>
               )}
 
-              {article.aiTranslation && (
-                <details
-                  className="rounded-md border p-3"
-                  style={{ borderColor: "var(--card-border)" }}
-                >
-                  <summary
-                    className="cursor-pointer text-xs font-semibold"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    日本語翻訳を表示
-                  </summary>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
-                    {article.aiTranslation}
-                  </p>
-                </details>
-              )}
-
               {relatedLinks.length > 0 && (
                 <div>
                   <h3 className="mb-1.5 text-xs font-semibold" style={{ color: "var(--muted)" }}>
@@ -292,28 +278,75 @@ export function ArticleDetail({ article, onChange }: Props) {
 
         {/* 記事本文 */}
         {article.contentHtml ? (
-          <div
-            className="prose prose-neutral max-w-none dark:prose-invert
-              prose-headings:font-bold prose-headings:tracking-tight
-              prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
-              prose-p:leading-7 prose-p:text-[15px]
-              prose-a:underline prose-a:underline-offset-2
-              prose-img:rounded-lg prose-img:shadow-sm
-              prose-pre:rounded-lg prose-pre:text-sm
-              prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
-              prose-blockquote:border-l-2 prose-blockquote:not-italic
-              prose-li:leading-7"
-            style={
-              {
-                "--tw-prose-body": "var(--fg)",
-                "--tw-prose-headings": "var(--fg)",
-                "--tw-prose-links": "var(--accent)",
-                "--tw-prose-quotes": "var(--muted)",
-                "--tw-prose-quote-borders": "var(--accent)",
-              } as React.CSSProperties
-            }
-            dangerouslySetInnerHTML={{ __html: article.contentHtml }}
-          />
+          <>
+            {article.aiTranslation && (
+              <div
+                className="mb-4 inline-flex rounded-md border text-xs"
+                style={{ borderColor: "var(--card-border)" }}
+              >
+                <button
+                  onClick={() => setShowTranslation(false)}
+                  className="px-3 py-1.5"
+                  style={{
+                    background: showTranslation ? "transparent" : "var(--accent-subtle)",
+                    color: showTranslation ? "var(--muted)" : "var(--accent)",
+                    fontWeight: showTranslation ? "normal" : 600,
+                  }}
+                >
+                  原文
+                </button>
+                <button
+                  onClick={() => setShowTranslation(true)}
+                  className="px-3 py-1.5"
+                  style={{
+                    background: showTranslation ? "var(--accent-subtle)" : "transparent",
+                    color: showTranslation ? "var(--accent)" : "var(--muted)",
+                    fontWeight: showTranslation ? 600 : "normal",
+                    borderLeft: "1px solid var(--card-border)",
+                  }}
+                >
+                  日本語
+                </button>
+              </div>
+            )}
+            {showTranslation && article.aiTranslation ? (
+              <div
+                className="prose prose-neutral max-w-none dark:prose-invert
+                  prose-p:leading-7 prose-p:text-[15px]"
+                style={
+                  {
+                    "--tw-prose-body": "var(--fg)",
+                    "--tw-prose-headings": "var(--fg)",
+                  } as React.CSSProperties
+                }
+              >
+                <p className="whitespace-pre-wrap">{article.aiTranslation}</p>
+              </div>
+            ) : (
+              <div
+                className="prose prose-neutral max-w-none dark:prose-invert
+                  prose-headings:font-bold prose-headings:tracking-tight
+                  prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+                  prose-p:leading-7 prose-p:text-[15px]
+                  prose-a:underline prose-a:underline-offset-2
+                  prose-img:rounded-lg prose-img:shadow-sm
+                  prose-pre:rounded-lg prose-pre:text-sm
+                  prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
+                  prose-blockquote:border-l-2 prose-blockquote:not-italic
+                  prose-li:leading-7"
+                style={
+                  {
+                    "--tw-prose-body": "var(--fg)",
+                    "--tw-prose-headings": "var(--fg)",
+                    "--tw-prose-links": "var(--accent)",
+                    "--tw-prose-quotes": "var(--muted)",
+                    "--tw-prose-quote-borders": "var(--accent)",
+                  } as React.CSSProperties
+                }
+                dangerouslySetInnerHTML={{ __html: article.contentHtml }}
+              />
+            )}
+          </>
         ) : (
           <p className="text-sm" style={{ color: "var(--muted)" }}>
             本文を取得できませんでした
