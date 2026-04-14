@@ -8,8 +8,9 @@ services:
     restart: unless-stopped
     expose:
       - "3000"
-    ports:
-      - "3000:3000"
+    # ホスト公開はCloudflare Tunnel経由を想定。ローカル直接アクセスが必要なら以下を有効化:
+    # ports:
+    #   - "3000:3000"
     volumes:
       - yomu-data:/data
     environment:
