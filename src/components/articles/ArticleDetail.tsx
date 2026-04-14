@@ -18,6 +18,19 @@ export function ArticleDetail({ article, onChange }: Props) {
   const [aiError, setAiError] = useState<string | null>(null);
   const [streamText, setStreamText] = useState("");
   const [showTranslation, setShowTranslation] = useState(false);
+  const [stage1Loading, setStage1Loading] = useState(false);
+
+  const runStage1 = useCallback(async () => {
+    if (!article) return;
+    setStage1Loading(true);
+    try {
+      const res = await fetch(`/api/articles/${article.id}/stage1`, { method: "POST" });
+      if (res.ok) onChange(await res.json());
+      else alert("タイトル翻訳に失敗しました");
+    } finally {
+      setStage1Loading(false);
+    }
+  }, [article, onChange]);
 
   useEffect(() => {
     setAiError(null);
@@ -154,6 +167,15 @@ export function ArticleDetail({ article, onChange }: Props) {
             </div>
           </div>
           <div className="flex shrink-0 gap-1.5">
+            <button
+              onClick={runStage1}
+              disabled={stage1Loading || article.aiStage1Status === "processing"}
+              className="rounded-md px-2.5 py-1.5 text-xs transition-colors disabled:opacity-50"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              title="タイトル翻訳・要約・タグを再生成"
+            >
+              {stage1Loading || article.aiStage1Status === "processing" ? "翻訳中..." : "🌐 翻訳"}
+            </button>
             <button
               onClick={() => toggle("isStarred", !article.isStarred)}
               className="rounded-md px-2.5 py-1.5 text-sm transition-colors"
