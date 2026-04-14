@@ -21,7 +21,17 @@ export default function FeedsPage() {
   const [search, setSearch] = useState("");
   const [listWidth, setListWidth] = useState<number | null>(null);
   const [aiStatus, setAiStatus] = useState<{ pending: number; processing: number; failed: number; currentTitle: string | null; currentFeedTitle: string | null } | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileView, setMobileView] = useState<"sidebar" | "list" | "detail">("list");
   const resizing = useRef(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
@@ -114,6 +124,7 @@ export default function FeedsPage() {
 
   function handleSelect(a: ArticleDTO) {
     setSelected(a);
+    if (isMobile) setMobileView("detail");
     if (!a.isRead) {
       fetch(`/api/articles/${a.id}`, {
         method: "PATCH",
@@ -131,35 +142,53 @@ export default function FeedsPage() {
     }
   }
 
+  const showSidebar = !isMobile || mobileView === "sidebar";
+  const showList = !isMobile || mobileView === "list";
+  const showDetail = !isMobile || mobileView === "detail";
+
   return (
     <div className="flex h-screen">
-      <FeedSidebar
-        feeds={feeds}
-        selectedFeedId={selectedFeedId}
-        onSelect={(id) => {
-          setSelectedFeedId(id);
-          setSelected(null);
-        }}
-        onAddFeed={() => setAddOpen(true)}
-        onSync={sync}
-        syncing={syncing}
-        onLogout={logout}
-        onFeedMoved={loadFeeds}
-        onFeedsDeleted={() => {
-          loadFeeds();
-          loadArticles();
-          setSelected(null);
-          setSelectedFeedId(null);
-        }}
-      />
+      <div className={showSidebar ? (isMobile ? "w-full" : "") : "hidden"}>
+        <FeedSidebar
+          feeds={feeds}
+          selectedFeedId={selectedFeedId}
+          onSelect={(id) => {
+            setSelectedFeedId(id);
+            setSelected(null);
+            if (isMobile) setMobileView("list");
+          }}
+          onAddFeed={() => setAddOpen(true)}
+          onSync={sync}
+          syncing={syncing}
+          onLogout={logout}
+          onFeedMoved={loadFeeds}
+          onFeedsDeleted={() => {
+            loadFeeds();
+            loadArticles();
+            setSelected(null);
+            setSelectedFeedId(null);
+          }}
+          isMobile={isMobile}
+        />
+      </div>
       <section
-        className={`flex shrink-0 flex-col ${listWidth === null ? "w-96" : ""}`}
-        style={listWidth !== null ? { width: listWidth } : undefined}
+        className={`${showList ? "flex" : "hidden"} ${isMobile ? "w-full" : `shrink-0 ${listWidth === null ? "w-96" : ""}`} flex-col`}
+        style={!isMobile && listWidth !== null ? { width: listWidth } : undefined}
       >
         <div
           className="flex items-center gap-2 border-b p-2"
           style={{ borderColor: "var(--card-border)" }}
         >
+          {isMobile && (
+            <button
+              onClick={() => setMobileView("sidebar")}
+              className="rounded px-2 py-1 text-lg"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              aria-label="フィード一覧"
+            >
+              ☰
+            </button>
+          )}
           <input
             type="search"
             placeholder="検索..."
@@ -198,24 +227,43 @@ export default function FeedsPage() {
           />
         </div>
       </section>
-      {/* リサイズハンドル */}
-      <div
-        className="w-1 shrink-0 cursor-col-resize transition-colors hover:bg-[var(--accent)]"
-        style={{ background: "var(--card-border)" }}
-        onMouseDown={() => {
-          resizing.current = true;
-          document.body.style.cursor = "col-resize";
-          document.body.style.userSelect = "none";
-        }}
-      />
-      <section className="flex-1 overflow-hidden">
-        <ArticleDetail
-          article={selected}
-          onChange={(a) => {
-            setSelected(a);
-            setArticles((prev) => prev.map((x) => (x.id === a.id ? a : x)));
+      {/* リサイズハンドル (desktop only) */}
+      {!isMobile && (
+        <div
+          className="w-1 shrink-0 cursor-col-resize transition-colors hover:bg-[var(--accent)]"
+          style={{ background: "var(--card-border)" }}
+          onMouseDown={() => {
+            resizing.current = true;
+            document.body.style.cursor = "col-resize";
+            document.body.style.userSelect = "none";
           }}
         />
+      )}
+      <section className={`${showDetail ? "flex" : "hidden"} ${isMobile ? "w-full" : "flex-1"} flex-col overflow-hidden`}>
+        {isMobile && (
+          <div
+            className="flex items-center gap-2 border-b p-2"
+            style={{ borderColor: "var(--card-border)" }}
+          >
+            <button
+              onClick={() => setMobileView("list")}
+              className="rounded px-2 py-1 text-sm"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              aria-label="戻る"
+            >
+              ← 戻る
+            </button>
+          </div>
+        )}
+        <div className="flex-1 overflow-hidden">
+          <ArticleDetail
+            article={selected}
+            onChange={(a) => {
+              setSelected(a);
+              setArticles((prev) => prev.map((x) => (x.id === a.id ? a : x)));
+            }}
+          />
+        </div>
       </section>
 
       <AddFeedDialog

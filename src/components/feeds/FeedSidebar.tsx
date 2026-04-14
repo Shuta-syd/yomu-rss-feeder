@@ -13,6 +13,7 @@ interface Props {
   onLogout: () => void;
   onFeedMoved?: () => void;
   onFeedsDeleted?: () => void;
+  isMobile?: boolean;
 }
 
 export function FeedSidebar({
@@ -25,6 +26,7 @@ export function FeedSidebar({
   onLogout,
   onFeedMoved,
   onFeedsDeleted,
+  isMobile,
 }: Props) {
   const grouped = feeds.reduce<Record<string, FeedWithUnread[]>>((acc, f) => {
     (acc[f.category] ??= []).push(f);
@@ -122,7 +124,7 @@ export function FeedSidebar({
 
   return (
     <aside
-      className="flex h-full w-64 shrink-0 flex-col border-r"
+      className={`flex h-full flex-col border-r ${isMobile ? "w-full" : "w-64 shrink-0"}`}
       style={{ background: "var(--sidebar-bg)", borderColor: "var(--card-border)" }}
     >
       <div className="flex items-center justify-between border-b p-3" style={{ borderColor: "var(--card-border)" }}>

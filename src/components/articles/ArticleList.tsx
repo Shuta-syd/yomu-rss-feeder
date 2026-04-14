@@ -10,7 +10,7 @@ function Thumbnail({ src }: { src: string }) {
     <img
       src={src}
       alt=""
-      className="h-24 w-32 shrink-0 rounded object-cover"
+      className="h-20 w-24 shrink-0 rounded object-cover md:h-24 md:w-32"
       loading="lazy"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
