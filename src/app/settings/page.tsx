@@ -99,6 +99,10 @@ export default function SettingsPage() {
   const [pushSupported, setPushSupported] = useState(false);
   const [notifSaving, setNotifSaving] = useState(false);
   const [opmlImporting, setOpmlImporting] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -265,6 +269,34 @@ export default function SettingsPage() {
       setToast("連携を解除しました");
     } else {
       setToast("解除失敗");
+    }
+  }
+
+  async function changePw() {
+    if (newPassword.length < 8) {
+      setToast("新しいパスワードは8文字以上");
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setToast("パスワードが一致しません");
+      return;
+    }
+    setPwSaving(true);
+    const res = await fetch("/api/auth/password", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    setPwSaving(false);
+    if (res.ok) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setNewPasswordConfirm("");
+      setToast("パスワードを変更しました");
+    } else if (res.status === 401) {
+      setToast("現在のパスワードが違います");
+    } else {
+      setToast("変更失敗");
     }
   }
 
@@ -590,13 +622,46 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/*
-            パスワード変更 (将来実装予定)
-            <div className="space-y-3">
-              <h2 className={sectionTitleCls}>パスワード変更</h2>
-              ...
+          <div className="space-y-3">
+            <h2 className={sectionTitleCls}>パスワード変更</h2>
+            <div className="space-y-2">
+              <input
+                type="password"
+                placeholder="現在のパスワード"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+                autoComplete="current-password"
+              />
+              <input
+                type="password"
+                placeholder="新しいパスワード (8文字以上)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+                autoComplete="new-password"
+              />
+              <input
+                type="password"
+                placeholder="新しいパスワード (確認)"
+                value={newPasswordConfirm}
+                onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+                autoComplete="new-password"
+              />
+              <button
+                onClick={changePw}
+                disabled={pwSaving}
+                className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+              >
+                {pwSaving ? "変更中..." : "パスワードを変更"}
+              </button>
             </div>
-          */}
+          </div>
         </section>
       )}
 

@@ -73,6 +73,16 @@ export async function verifyCredentials(uid: string, password: string): Promise<
   return Boolean(uidOk && passwordOk && storedHash);
 }
 
+export async function changePassword(currentPassword: string, newPassword: string): Promise<boolean> {
+  const storedHash = getConfig("password_hash");
+  if (!storedHash) return false;
+  const ok = await bcrypt.compare(currentPassword, storedHash);
+  if (!ok) return false;
+  const newHash = await bcrypt.hash(newPassword, 12);
+  setConfig("password_hash", newHash);
+  return true;
+}
+
 export async function issueSession(): Promise<void> {
   const token = randomBytes(32).toString("hex");
   const tokenHash = hashToken(token);
