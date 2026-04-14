@@ -47,6 +47,12 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   anthropic: "Anthropic",
 };
 
+function detectProvider(model: string): ProviderType {
+  if (model.startsWith("gemini")) return "gemini";
+  if (model.startsWith("claude")) return "anthropic";
+  return "openai";
+}
+
 const TABS: { key: TabKey; label: string }[] = [
   { key: "ai", label: "AI" },
   { key: "notification", label: "通知" },
@@ -130,17 +136,6 @@ export default function SettingsPage() {
   }, [toast]);
 
   if (!settings) return <p className="p-6 text-sm">Loading...</p>;
-
-  function handleProviderChange(stage: "stage1Provider" | "stage2Provider", provider: ProviderType) {
-    if (!settings) return;
-    const modelKey = stage === "stage1Provider" ? "geminiModelStage1" : "geminiModelStage2";
-    const models = PROVIDER_MODELS[provider];
-    setSettings({
-      ...settings,
-      [stage]: provider,
-      [modelKey]: models[0] ?? "",
-    });
-  }
 
   async function saveAI() {
     if (!settings) return;
@@ -368,62 +363,50 @@ export default function SettingsPage() {
 
             <div>
               <div className="mb-1.5 text-sm font-medium" style={{ color: "var(--muted)" }}>
-                Stage1 (自動要約)
+                自動要約
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <select
-                  value={settings.stage1Provider}
-                  onChange={(e) => handleProviderChange("stage1Provider", e.target.value as ProviderType)}
-                  className={inputCls}
-                  style={inputStyle}
-                  aria-label="Stage1 プロバイダ"
-                >
-                  {(Object.keys(PROVIDER_LABELS) as ProviderType[]).map((p) => (
-                    <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
-                  ))}
-                </select>
-                <select
-                  value={settings.geminiModelStage1}
-                  onChange={(e) => setSettings({ ...settings, geminiModelStage1: e.target.value })}
-                  className={inputCls}
-                  style={inputStyle}
-                  aria-label="Stage1 モデル"
-                >
-                  {PROVIDER_MODELS[settings.stage1Provider].map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
+              <select
+                value={settings.geminiModelStage1}
+                onChange={(e) => {
+                  const model = e.target.value;
+                  setSettings({ ...settings, geminiModelStage1: model, stage1Provider: detectProvider(model) });
+                }}
+                className={inputCls}
+                style={inputStyle}
+                aria-label="自動要約モデル"
+              >
+                {(Object.keys(PROVIDER_MODELS) as ProviderType[]).map((p) => (
+                  <optgroup key={p} label={PROVIDER_LABELS[p]}>
+                    {PROVIDER_MODELS[p].map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
             </div>
 
             <div>
               <div className="mb-1.5 text-sm font-medium" style={{ color: "var(--muted)" }}>
-                Stage2 (詳細分析)
+                詳細分析
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <select
-                  value={settings.stage2Provider}
-                  onChange={(e) => handleProviderChange("stage2Provider", e.target.value as ProviderType)}
-                  className={inputCls}
-                  style={inputStyle}
-                  aria-label="Stage2 プロバイダ"
-                >
-                  {(Object.keys(PROVIDER_LABELS) as ProviderType[]).map((p) => (
-                    <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
-                  ))}
-                </select>
-                <select
-                  value={settings.geminiModelStage2}
-                  onChange={(e) => setSettings({ ...settings, geminiModelStage2: e.target.value })}
-                  className={inputCls}
-                  style={inputStyle}
-                  aria-label="Stage2 モデル"
-                >
-                  {PROVIDER_MODELS[settings.stage2Provider].map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
+              <select
+                value={settings.geminiModelStage2}
+                onChange={(e) => {
+                  const model = e.target.value;
+                  setSettings({ ...settings, geminiModelStage2: model, stage2Provider: detectProvider(model) });
+                }}
+                className={inputCls}
+                style={inputStyle}
+                aria-label="詳細分析モデル"
+              >
+                {(Object.keys(PROVIDER_MODELS) as ProviderType[]).map((p) => (
+                  <optgroup key={p} label={PROVIDER_LABELS[p]}>
+                    {PROVIDER_MODELS[p].map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
             </div>
           </div>
 
