@@ -3,6 +3,17 @@
 import type { ArticleDTO } from "@/types/article";
 import { useEffect, useState, useCallback } from "react";
 
+function humanizeError(raw: string): string {
+  const s = raw.toLowerCase();
+  if (s.includes("api key") || s.includes("apikey")) return "APIキーが設定されていません。設定画面で登録してください。";
+  if (s.includes("rate") || s.includes("429") || s.includes("quota")) return "AIの利用上限に達しました。しばらくしてから再試行してください。";
+  if (s.includes("timeout") || s.includes("timed out")) return "応答に時間がかかりすぎました。再試行してください。";
+  if (s.includes("json") || s.includes("parse") || s.includes("syntax")) return "AI応答の解析に失敗しました。再生成してください。";
+  if (s.includes("blocked") || s.includes("safety")) return "AIがコンテンツをブロックしました。";
+  if (s.includes("network") || s.includes("fetch") || s.includes("econnrefused")) return "通信エラーが発生しました。";
+  return "AI処理に失敗しました。再試行してください。";
+}
+
 interface Props {
   article: ArticleDTO | null;
   onChange: (a: ArticleDTO) => void;
@@ -88,7 +99,7 @@ export function ArticleDetail({ article, onChange }: Props) {
               }
               if (data.message && !data.id) {
                 // error event
-                setAiError(data.message);
+                setAiError(humanizeError(String(data.message)));
               }
             } catch {
               // skip
@@ -245,7 +256,11 @@ export function ArticleDetail({ article, onChange }: Props) {
             </button>
           </div>
 
-          {aiError && <p className="fade-in-up mb-2 text-sm text-red-500">{aiError}</p>}
+          {(aiError || (!aiLoading && article.aiStage2Status === "failed" && article.aiStage2Error)) && (
+            <p className="fade-in-up mb-2 text-sm" style={{ color: "#f87171" }}>
+              {aiError ?? humanizeError(article.aiStage2Error ?? "")}
+            </p>
+          )}
 
           {/* ストリーミング中: 生成前は shimmer、生成中は stream を穏やかに表示 */}
           {aiLoading && !streamText && (
