@@ -79,9 +79,14 @@ export function ArticleList({ articles, selectedId, onSelect }: Props) {
                     {a.aiSummaryShort}
                   </p>
                 )}
-                <span className="mt-0.5 block text-xs" style={{ color: "var(--muted)" }}>
-                  {formatDate(a.publishedAt)}
-                </span>
+                <div className="mt-0.5 flex items-center justify-between gap-2 text-xs" style={{ color: "var(--muted)" }}>
+                  <span>{formatDate(a.publishedAt)}</span>
+                  {a.feedTitle && (
+                    <span className="truncate text-right" title={a.feedTitle}>
+                      {a.feedTitle}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </button>

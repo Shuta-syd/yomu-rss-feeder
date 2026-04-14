@@ -1,6 +1,7 @@
 export interface ArticleDTO {
   id: string;
   feedId: string;
+  feedTitle: string | null;
   title: string;
   url: string;
   author: string | null;

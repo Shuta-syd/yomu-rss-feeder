@@ -1,6 +1,8 @@
 import { rawDb } from "./db";
 import type { Article } from "./db/schema";
 
+export type ArticleWithFeed = Article & { feedTitle: string | null };
+
 export interface ArticleListParams {
   feedId?: string;
   isRead?: boolean;
@@ -11,7 +13,7 @@ export interface ArticleListParams {
 }
 
 export interface ArticleListResult {
-  articles: Article[];
+  articles: ArticleWithFeed[];
   nextCursor: string | null;
   total: number;
 }
@@ -33,10 +35,11 @@ function makeCursor(sortKey: number, id: string): string {
   return `${sortKey}_${id}`;
 }
 
-function rowToArticle(row: Record<string, unknown>): Article {
+function rowToArticle(row: Record<string, unknown>): ArticleWithFeed {
   return {
     id: row["id"] as string,
     feedId: row["feed_id"] as string,
+    feedTitle: (row["feed_title"] as string | null) ?? null,
     title: row["title"] as string,
     url: row["url"] as string,
     author: (row["author"] as string | null) ?? null,
@@ -73,28 +76,28 @@ export function listArticles(params: ArticleListParams): ArticleListResult {
   const values: unknown[] = [];
 
   if (params.feedId) {
-    where.push("feed_id = ?");
+    where.push("a.feed_id = ?");
     values.push(params.feedId);
   }
   if (params.isRead !== undefined) {
-    where.push("is_read = ?");
+    where.push("a.is_read = ?");
     values.push(params.isRead ? 1 : 0);
   }
   if (params.isStarred !== undefined) {
-    where.push("is_starred = ?");
+    where.push("a.is_starred = ?");
     values.push(params.isStarred ? 1 : 0);
   }
   if (params.search && params.search.trim()) {
     const term = params.search.trim().replace(/"/g, '""');
     where.push(
-      "rowid IN (SELECT rowid FROM articles_fts WHERE articles_fts MATCH ?)",
+      "a.rowid IN (SELECT rowid FROM articles_fts WHERE articles_fts MATCH ?)",
     );
     values.push(`"${term}"`);
   }
 
   const cursor = parseCursor(params.cursor);
   if (cursor) {
-    where.push("(sort_key < ? OR (sort_key = ? AND id < ?))");
+    where.push("(a.sort_key < ? OR (a.sort_key = ? AND a.id < ?))");
     values.push(cursor.sortKey, cursor.sortKey, cursor.id);
   }
 
@@ -102,7 +105,7 @@ export function listArticles(params: ArticleListParams): ArticleListResult {
 
   const rows = rawDb
     .prepare(
-      `SELECT * FROM articles ${whereSql} ORDER BY sort_key DESC, id DESC LIMIT ?`,
+      `SELECT a.*, f.title AS feed_title FROM articles a LEFT JOIN feeds f ON f.id = a.feed_id ${whereSql} ORDER BY a.sort_key DESC, a.id DESC LIMIT ?`,
     )
     .all(...values, limit + 1) as Record<string, unknown>[];
 
@@ -114,7 +117,7 @@ export function listArticles(params: ArticleListParams): ArticleListResult {
 
   const totalRow = rawDb
     .prepare<unknown[], { count: number }>(
-      `SELECT COUNT(*) as count FROM articles ${whereSql}`,
+      `SELECT COUNT(*) as count FROM articles a ${whereSql}`,
     )
     .get(...values);
 
