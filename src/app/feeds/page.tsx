@@ -177,28 +177,17 @@ export default function FeedsPage() {
             ⚙
           </a>
         </div>
-        {aiStatus && (aiStatus.pending > 0 || aiStatus.processing > 0) && (
+        {aiStatus && aiStatus.processing > 0 && aiStatus.currentFeedTitle && (
           <div
             className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
             style={{ borderColor: "var(--card-border)", background: "var(--ai-bg)", color: "var(--muted)" }}
           >
-            {aiStatus.processing > 0 && aiStatus.currentFeedTitle ? (
-              <>
-                <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full" style={{ background: "var(--accent)" }} />
-                <span className="shrink-0" style={{ color: "var(--accent)" }}>翻訳中</span>
-                <span className="min-w-0 flex-1 truncate font-medium" title={`${aiStatus.currentFeedTitle} / ${aiStatus.currentTitle ?? ""}`}>
-                  {aiStatus.currentFeedTitle}
-                  {aiStatus.currentTitle && <span className="ml-1 opacity-60">― {aiStatus.currentTitle}</span>}
-                </span>
-                <span className="shrink-0 opacity-70">残り {aiStatus.pending}</span>
-              </>
-            ) : (
-              <>
-                <span className="inline-block h-2 w-2 shrink-0 rounded-full opacity-40" style={{ background: "var(--muted)" }} />
-                <span className="opacity-70">待機 {aiStatus.pending} (次tickで再開)</span>
-              </>
-            )}
-            {aiStatus.failed > 0 && <span className="shrink-0" style={{ color: "#f87171" }}>失敗 {aiStatus.failed}</span>}
+            <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full" style={{ background: "var(--accent)" }} />
+            <span className="shrink-0" style={{ color: "var(--accent)" }}>翻訳中</span>
+            <span className="min-w-0 flex-1 truncate font-medium" title={`${aiStatus.currentFeedTitle} / ${aiStatus.currentTitle ?? ""}`}>
+              {aiStatus.currentFeedTitle}
+              {aiStatus.currentTitle && <span className="ml-1 opacity-60">― {aiStatus.currentTitle}</span>}
+            </span>
           </div>
         )}
         <div className="flex-1 overflow-hidden">
