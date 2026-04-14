@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 type ProviderType = "gemini" | "openai" | "anthropic";
+type TabKey = "ai" | "notification" | "integration" | "account";
 
 interface Settings {
   hasGeminiApiKey: boolean;
@@ -46,23 +47,51 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   anthropic: "Anthropic",
 };
 
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "ai", label: "AI" },
+  { key: "notification", label: "通知" },
+  { key: "integration", label: "連携" },
+  { key: "account", label: "アカウント" },
+];
+
+interface ToastProps {
+  message: string | null;
+}
+
+function Toast({ message }: ToastProps) {
+  if (!message) return null;
+  return (
+    <div
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded px-4 py-2 text-sm shadow-lg transition-opacity"
+      style={{
+        background: "var(--card)",
+        border: "1px solid var(--card-border)",
+        color: "var(--fg)",
+      }}
+      role="status"
+    >
+      {message}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TabKey>("ai");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [openaiApiKey, setOpenaiApiKey] = useState("");
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [xClientId, setXClientId] = useState("");
   const [xConnected, setXConnected] = useState(false);
   const [xHasClientId, setXHasClientId] = useState(false);
   const [xSaving, setXSaving] = useState(false);
-  const [xMessage, setXMessage] = useState<string | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
-  const [pushMessage, setPushMessage] = useState<string | null>(null);
   const [pushSupported, setPushSupported] = useState(false);
+  const [notifSaving, setNotifSaving] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -74,7 +103,7 @@ export default function SettingsPage() {
         return r.json();
       })
       .then((d) => d && setSettings(d));
-    // Push通知状態チェック
+
     if ("serviceWorker" in navigator && "PushManager" in window) {
       setPushSupported(true);
       navigator.serviceWorker.ready.then((reg) => {
@@ -94,6 +123,12 @@ export default function SettingsPage() {
       });
   }, [router]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(id);
+  }, [toast]);
+
   if (!settings) return <p className="p-6 text-sm">Loading...</p>;
 
   function handleProviderChange(stage: "stage1Provider" | "stage2Provider", provider: ProviderType) {
@@ -107,16 +142,14 @@ export default function SettingsPage() {
     });
   }
 
-  async function save() {
+  async function saveAI() {
     if (!settings) return;
     setSaving(true);
-    setMessage(null);
     const body: Record<string, unknown> = {
       stage1Provider: settings.stage1Provider,
       stage2Provider: settings.stage2Provider,
       geminiModelStage1: settings.geminiModelStage1,
       geminiModelStage2: settings.geminiModelStage2,
-      autoMarkAsRead: settings.autoMarkAsRead,
     };
     if (geminiApiKey) body["geminiApiKey"] = geminiApiKey;
     if (openaiApiKey) body["openaiApiKey"] = openaiApiKey;
@@ -132,13 +165,119 @@ export default function SettingsPage() {
       setGeminiApiKey("");
       setOpenaiApiKey("");
       setAnthropicApiKey("");
-      setMessage("保存しました");
+      setToast("保存しました");
     } else {
-      setMessage("保存失敗");
+      setToast("保存失敗");
+    }
+  }
+
+  async function saveNotification() {
+    if (!settings) return;
+    setNotifSaving(true);
+    const res = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autoMarkAsRead: settings.autoMarkAsRead }),
+    });
+    setNotifSaving(false);
+    if (res.ok) {
+      setSettings(await res.json());
+      setToast("保存しました");
+    } else {
+      setToast("保存失敗");
+    }
+  }
+
+  async function togglePush() {
+    setPushLoading(true);
+    try {
+      if (pushEnabled) {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await sub.unsubscribe();
+          await fetch("/api/push/unsubscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          });
+        }
+        setPushEnabled(false);
+        setToast("通知を無効にしました");
+      } else {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          setToast("通知の許可が必要です");
+          setPushLoading(false);
+          return;
+        }
+        const vapidRes = await fetch("/api/push/vapid");
+        const { publicKey } = await vapidRes.json();
+        if (!publicKey) {
+          setToast("VAPID鍵が未設定です");
+          setPushLoading(false);
+          return;
+        }
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: publicKey,
+        });
+        const json = sub.toJSON();
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            endpoint: sub.endpoint,
+            keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
+          }),
+        });
+        setPushEnabled(true);
+        setToast("通知を有効にしました");
+      }
+    } catch (e) {
+      setToast("エラーが発生しました");
+      console.error(e);
+    }
+    setPushLoading(false);
+  }
+
+  async function saveXClientId() {
+    if (!xClientId) return;
+    setXSaving(true);
+    const res = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ xClientId }),
+    });
+    setXSaving(false);
+    if (res.ok) {
+      setXClientId("");
+      setXHasClientId(true);
+      setToast("Client ID を保存しました");
+    } else {
+      setToast("保存失敗");
+    }
+  }
+
+  async function disconnectX() {
+    setXSaving(true);
+    const res = await fetch("/api/x/disconnect", { method: "POST" });
+    setXSaving(false);
+    if (res.ok) {
+      setXConnected(false);
+      setToast("連携を解除しました");
+    } else {
+      setToast("解除失敗");
     }
   }
 
   const inputStyle = { borderColor: "var(--card-border)", background: "var(--card)" };
+  const inputCls = "w-full rounded border px-3 py-2";
+  const labelCls = "mb-1.5 block text-sm font-medium";
+  const sectionTitleCls = "text-base font-semibold";
+  const primaryBtnCls = "rounded px-4 py-2 text-sm font-medium disabled:opacity-50";
+  const primaryBtnStyle = { background: "var(--accent)", color: "var(--accent-fg)" };
 
   return (
     <main className="mx-auto max-w-2xl p-6">
@@ -156,293 +295,296 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <section className="space-y-6">
-        {/* API Keys */}
-        <div className="space-y-3">
-          <h2 className="text-lg font-medium">API Keys</h2>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Gemini API Key</label>
-            <input
-              type="password"
-              placeholder={settings.hasGeminiApiKey ? "(設定済み) 変更する場合のみ入力" : "未設定"}
-              value={geminiApiKey}
-              onChange={(e) => setGeminiApiKey(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-              style={inputStyle}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">OpenAI API Key</label>
-            <input
-              type="password"
-              placeholder={settings.hasOpenaiApiKey ? "(設定済み) 変更する場合のみ入力" : "未設定"}
-              value={openaiApiKey}
-              onChange={(e) => setOpenaiApiKey(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-              style={inputStyle}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Anthropic API Key</label>
-            <input
-              type="password"
-              placeholder={settings.hasAnthropicApiKey ? "(設定済み) 変更する場合のみ入力" : "未設定"}
-              value={anthropicApiKey}
-              onChange={(e) => setAnthropicApiKey(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-              style={inputStyle}
-            />
-          </div>
-        </div>
+      {/* タブバー */}
+      <div
+        className="flex gap-1 border-b"
+        style={{ borderColor: "var(--card-border)" }}
+        role="tablist"
+      >
+        {TABS.map((t) => {
+          const active = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveTab(t.key)}
+              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                active ? "" : "border-transparent"
+              }`}
+              style={{
+                borderColor: active ? "var(--accent)" : "transparent",
+                color: active ? "var(--accent)" : "var(--muted)",
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
 
-        {/* Stage 1 */}
-        <div className="space-y-3">
-          <h2 className="text-lg font-medium">Stage1 (自動要約)</h2>
-          <div className="grid grid-cols-2 gap-3">
+      {/* AIタブ */}
+      {activeTab === "ai" && (
+        <section className="mt-6 space-y-4">
+          <div className="space-y-3">
+            <h2 className={sectionTitleCls}>API Keys</h2>
             <div>
-              <label className="mb-1 block text-sm font-medium">プロバイダ</label>
-              <select
-                value={settings.stage1Provider}
-                onChange={(e) => handleProviderChange("stage1Provider", e.target.value as ProviderType)}
-                className="w-full rounded border px-3 py-2"
-                style={inputStyle}
-              >
-                {(Object.keys(PROVIDER_LABELS) as ProviderType[]).map((p) => (
-                  <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">モデル</label>
-              <select
-                value={settings.geminiModelStage1}
-                onChange={(e) => setSettings({ ...settings, geminiModelStage1: e.target.value })}
-                className="w-full rounded border px-3 py-2"
-                style={inputStyle}
-              >
-                {PROVIDER_MODELS[settings.stage1Provider].map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Stage 2 */}
-        <div className="space-y-3">
-          <h2 className="text-lg font-medium">Stage2 (詳細分析)</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium">プロバイダ</label>
-              <select
-                value={settings.stage2Provider}
-                onChange={(e) => handleProviderChange("stage2Provider", e.target.value as ProviderType)}
-                className="w-full rounded border px-3 py-2"
-                style={inputStyle}
-              >
-                {(Object.keys(PROVIDER_LABELS) as ProviderType[]).map((p) => (
-                  <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">モデル</label>
-              <select
-                value={settings.geminiModelStage2}
-                onChange={(e) => setSettings({ ...settings, geminiModelStage2: e.target.value })}
-                className="w-full rounded border px-3 py-2"
-                style={inputStyle}
-              >
-                {PROVIDER_MODELS[settings.stage2Provider].map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={settings.autoMarkAsRead}
-            onChange={(e) =>
-              setSettings({ ...settings, autoMarkAsRead: e.target.checked })
-            }
-          />
-          記事を開いたら自動的に既読にする
-        </label>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={save}
-            disabled={saving}
-            className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
-            style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
-          >
-            {saving ? "保存中..." : "保存"}
-          </button>
-          <a
-            href="/api/feeds/export"
-            download="yomu-feeds.opml"
-            className="rounded px-4 py-2 text-sm font-medium"
-            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-          >
-            OPMLエクスポート
-          </a>
-          {message && <span className="text-sm" style={{ color: "var(--muted)" }}>{message}</span>}
-        </div>
-
-        {/* プッシュ通知 */}
-        {pushSupported && (
-          <div className="space-y-3 border-t pt-6" style={{ borderColor: "var(--card-border)" }}>
-            <h2 className="text-lg font-medium">プッシュ通知</h2>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={async () => {
-                  setPushLoading(true);
-                  setPushMessage(null);
-                  try {
-                    if (pushEnabled) {
-                      // 無効化
-                      const reg = await navigator.serviceWorker.ready;
-                      const sub = await reg.pushManager.getSubscription();
-                      if (sub) {
-                        await sub.unsubscribe();
-                        await fetch("/api/push/unsubscribe", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ endpoint: sub.endpoint }),
-                        });
-                      }
-                      setPushEnabled(false);
-                      setPushMessage("通知を無効にしました");
-                    } else {
-                      // 有効化
-                      const permission = await Notification.requestPermission();
-                      if (permission !== "granted") {
-                        setPushMessage("通知の許可が必要です");
-                        setPushLoading(false);
-                        return;
-                      }
-                      const vapidRes = await fetch("/api/push/vapid");
-                      const { publicKey } = await vapidRes.json();
-                      if (!publicKey) {
-                        setPushMessage("VAPID鍵が未設定です");
-                        setPushLoading(false);
-                        return;
-                      }
-                      const reg = await navigator.serviceWorker.ready;
-                      const sub = await reg.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: publicKey,
-                      });
-                      const json = sub.toJSON();
-                      await fetch("/api/push/subscribe", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          endpoint: sub.endpoint,
-                          keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
-                        }),
-                      });
-                      setPushEnabled(true);
-                      setPushMessage("通知を有効にしました");
-                    }
-                  } catch (e) {
-                    setPushMessage("エラーが発生しました");
-                    console.error(e);
-                  }
-                  setPushLoading(false);
-                }}
-                disabled={pushLoading}
-                className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
-              >
-                {pushLoading ? "処理中..." : pushEnabled ? "通知を無効にする" : "通知を有効にする"}
-              </button>
-              {pushMessage && <span className="text-sm" style={{ color: "var(--muted)" }}>{pushMessage}</span>}
-            </div>
-          </div>
-        )}
-
-        {/* X (Twitter) 連携 */}
-        <div className="space-y-3 border-t pt-6" style={{ borderColor: "var(--card-border)" }}>
-          <h2 className="text-lg font-medium">X (Twitter) 連携</h2>
-          <div>
-            <label className="mb-1 block text-sm font-medium">X Client ID</label>
-            <div className="flex gap-2">
+              <label className={labelCls}>Gemini API Key</label>
               <input
-                type="text"
-                placeholder={xHasClientId ? "(設定済み) 変更する場合のみ入力" : "未設定"}
-                value={xClientId}
-                onChange={(e) => setXClientId(e.target.value)}
-                className="flex-1 rounded border px-3 py-2"
+                type="password"
+                placeholder={settings.hasGeminiApiKey ? "(設定済み) 変更する場合のみ入力" : "未設定"}
+                value={geminiApiKey}
+                onChange={(e) => setGeminiApiKey(e.target.value)}
+                className={inputCls}
                 style={inputStyle}
               />
-              <button
-                onClick={async () => {
-                  if (!xClientId) return;
-                  setXSaving(true);
-                  setXMessage(null);
-                  const res = await fetch("/api/settings", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ xClientId }),
-                  });
-                  setXSaving(false);
-                  if (res.ok) {
-                    setXClientId("");
-                    setXHasClientId(true);
-                    setXMessage("Client ID を保存しました");
-                  } else {
-                    setXMessage("保存失敗");
-                  }
-                }}
-                disabled={xSaving || !xClientId}
-                className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
-              >
-                保存
-              </button>
+            </div>
+            <div>
+              <label className={labelCls}>OpenAI API Key</label>
+              <input
+                type="password"
+                placeholder={settings.hasOpenaiApiKey ? "(設定済み) 変更する場合のみ入力" : "未設定"}
+                value={openaiApiKey}
+                onChange={(e) => setOpenaiApiKey(e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Anthropic API Key</label>
+              <input
+                type="password"
+                placeholder={settings.hasAnthropicApiKey ? "(設定済み) 変更する場合のみ入力" : "未設定"}
+                value={anthropicApiKey}
+                onChange={(e) => setAnthropicApiKey(e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              />
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {xConnected ? (
-              <>
-                <span className="text-sm" style={{ color: "var(--muted)" }}>連携済み</span>
-                <button
-                  onClick={async () => {
-                    setXSaving(true);
-                    setXMessage(null);
-                    const res = await fetch("/api/x/disconnect", { method: "POST" });
-                    setXSaving(false);
-                    if (res.ok) {
-                      setXConnected(false);
-                      setXMessage("連携を解除しました");
-                    } else {
-                      setXMessage("解除失敗");
-                    }
-                  }}
-                  disabled={xSaving}
-                  className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50"
-                  style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+
+          <div className="space-y-3">
+            <h2 className={sectionTitleCls}>要約モデル</h2>
+
+            <div>
+              <div className="mb-1.5 text-sm font-medium" style={{ color: "var(--muted)" }}>
+                Stage1 (自動要約)
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <select
+                  value={settings.stage1Provider}
+                  onChange={(e) => handleProviderChange("stage1Provider", e.target.value as ProviderType)}
+                  className={inputCls}
+                  style={inputStyle}
+                  aria-label="Stage1 プロバイダ"
                 >
-                  連携解除
-                </button>
-              </>
-            ) : (
-              <a
-                href="/api/x/auth"
-                className={`rounded px-3 py-2 text-sm font-medium ${!xHasClientId ? "pointer-events-none opacity-50" : ""}`}
-                style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
-              >
-                Xと連携する
-              </a>
-            )}
-            {xMessage && <span className="text-sm" style={{ color: "var(--muted)" }}>{xMessage}</span>}
+                  {(Object.keys(PROVIDER_LABELS) as ProviderType[]).map((p) => (
+                    <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
+                  ))}
+                </select>
+                <select
+                  value={settings.geminiModelStage1}
+                  onChange={(e) => setSettings({ ...settings, geminiModelStage1: e.target.value })}
+                  className={inputCls}
+                  style={inputStyle}
+                  aria-label="Stage1 モデル"
+                >
+                  {PROVIDER_MODELS[settings.stage1Provider].map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-1.5 text-sm font-medium" style={{ color: "var(--muted)" }}>
+                Stage2 (詳細分析)
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <select
+                  value={settings.stage2Provider}
+                  onChange={(e) => handleProviderChange("stage2Provider", e.target.value as ProviderType)}
+                  className={inputCls}
+                  style={inputStyle}
+                  aria-label="Stage2 プロバイダ"
+                >
+                  {(Object.keys(PROVIDER_LABELS) as ProviderType[]).map((p) => (
+                    <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
+                  ))}
+                </select>
+                <select
+                  value={settings.geminiModelStage2}
+                  onChange={(e) => setSettings({ ...settings, geminiModelStage2: e.target.value })}
+                  className={inputCls}
+                  style={inputStyle}
+                  aria-label="Stage2 モデル"
+                >
+                  {PROVIDER_MODELS[settings.stage2Provider].map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+
+          <div>
+            <button
+              onClick={saveAI}
+              disabled={saving}
+              className={primaryBtnCls}
+              style={primaryBtnStyle}
+            >
+              {saving ? "保存中..." : "保存"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* 通知タブ */}
+      {activeTab === "notification" && (
+        <section className="mt-6 space-y-4">
+          <div className="space-y-3">
+            <h2 className={sectionTitleCls}>プッシュ通知</h2>
+            {pushSupported ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={pushEnabled}
+                  disabled={pushLoading}
+                  onChange={togglePush}
+                />
+                プッシュ通知を有効にする
+                {pushLoading && (
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>処理中...</span>
+                )}
+              </label>
+            ) : (
+              <p className="text-sm" style={{ color: "var(--muted)" }}>
+                このブラウザはプッシュ通知に対応していません
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <h2 className={sectionTitleCls}>既読</h2>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={settings.autoMarkAsRead}
+                onChange={(e) =>
+                  setSettings({ ...settings, autoMarkAsRead: e.target.checked })
+                }
+              />
+              記事を開いたら自動的に既読にする
+            </label>
+          </div>
+
+          <div>
+            <button
+              onClick={saveNotification}
+              disabled={notifSaving}
+              className={primaryBtnCls}
+              style={primaryBtnStyle}
+            >
+              {notifSaving ? "保存中..." : "保存"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* 連携タブ */}
+      {activeTab === "integration" && (
+        <section className="mt-6 space-y-4">
+          <div className="space-y-3">
+            <h2 className={sectionTitleCls}>X (Twitter) 連携</h2>
+            <div>
+              <label className={labelCls}>X Client ID</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder={xHasClientId ? "(設定済み) 変更する場合のみ入力" : "未設定"}
+                  value={xClientId}
+                  onChange={(e) => setXClientId(e.target.value)}
+                  className="flex-1 rounded border px-3 py-2"
+                  style={inputStyle}
+                />
+                <button
+                  onClick={saveXClientId}
+                  disabled={xSaving || !xClientId}
+                  className={primaryBtnCls}
+                  style={primaryBtnStyle}
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {xConnected ? (
+                <>
+                  <span className="text-sm" style={{ color: "var(--muted)" }}>連携済み</span>
+                  <button
+                    onClick={disconnectX}
+                    disabled={xSaving}
+                    className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50"
+                    style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                  >
+                    連携解除
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (!xHasClientId) return;
+                    window.location.href = "/api/x/auth";
+                  }}
+                  disabled={!xHasClientId}
+                  className={primaryBtnCls}
+                  style={primaryBtnStyle}
+                >
+                  Xと連携する
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h2 className={sectionTitleCls}>エクスポート</h2>
+            <a
+              href="/api/feeds/export"
+              download="yomu-feeds.opml"
+              className="inline-block rounded px-4 py-2 text-sm font-medium"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+            >
+              OPMLエクスポート
+            </a>
+          </div>
+        </section>
+      )}
+
+      {/* アカウントタブ */}
+      {activeTab === "account" && (
+        <section className="mt-6 space-y-4">
+          <div className="space-y-3">
+            <h2 className={sectionTitleCls}>テーマ</h2>
+            <div className="flex items-center gap-3">
+              <span className="text-sm" style={{ color: "var(--muted)" }}>
+                ライト / ダーク / システム
+              </span>
+              <ThemeToggle />
+            </div>
+          </div>
+
+          {/*
+            パスワード変更 (将来実装予定)
+            <div className="space-y-3">
+              <h2 className={sectionTitleCls}>パスワード変更</h2>
+              ...
+            </div>
+          */}
+        </section>
+      )}
+
+      <Toast message={toast} />
     </main>
   );
 }
