@@ -7,5 +7,5 @@ node dist/migrate.js
 echo "[yomu] Resetting stale processing states..."
 node dist/reset-stale.js
 
-echo "[yomu] Starting server (dev mode workaround for Next.js 16 prerender bug)..."
-exec pnpm next dev --hostname 0.0.0.0 --port 3000
+echo "[yomu] Starting server..."
+exec node server.js
