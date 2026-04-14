@@ -42,12 +42,20 @@ function ensureHook() {
       node.setAttribute("referrerpolicy", "no-referrer");
     }
   });
+  // 空の <a>・<p> や連続 <br> を取り除き、見栄えを整える
+  DOMPurify.addHook("uponSanitizeElement", (node) => {
+    if (!(node instanceof window.Element)) return;
+    const tag = node.tagName;
+    if ((tag === "A" || tag === "P" || tag === "LI") && node.textContent?.trim() === "" && !node.querySelector("img")) {
+      node.remove();
+    }
+  });
   hookInstalled = true;
 }
 
 export function sanitizeHtml(dirty: string): string {
   ensureHook();
-  return DOMPurify.sanitize(dirty, {
+  const clean = DOMPurify.sanitize(dirty, {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
     FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input"],
@@ -55,6 +63,11 @@ export function sanitizeHtml(dirty: string): string {
     WHOLE_DOCUMENT: false,
     RETURN_DOM: false,
   }) as unknown as string;
+  // 連続する <br> を最大1つに圧縮し、空の <p> を除去
+  return clean
+    .replace(/(<br\s*\/?>\s*){2,}/gi, "<br/>")
+    .replace(/<p>\s*<\/p>/gi, "")
+    .replace(/<a[^>]*>\s*<\/a>/gi, "");
 }
 
 export function htmlToPlain(html: string): string {
