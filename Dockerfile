@@ -71,6 +71,7 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV DATABASE_PATH=/data/yomu.db
 ENV MIGRATIONS_DIR=/app/drizzle
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ \
@@ -88,7 +89,9 @@ COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/drizzle ./drizzle
 COPY --from=builder --chown=node:node /app/entrypoint.sh ./entrypoint.sh
 
-RUN mkdir -p /data && chown node:node /data && chmod +x ./entrypoint.sh
+RUN mkdir -p /data /app/.next && \
+    chown -R node:node /data /app && \
+    chmod +x ./entrypoint.sh
 VOLUME ["/data"]
 
 USER node
