@@ -2,6 +2,7 @@
 @plugin "@tailwindcss/typography";
 
 :root {
+  color-scheme: light;
   --bg: #ffffff;
   --fg: #18181b;
   --card: #f4f4f5;
@@ -17,6 +18,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --bg: #0f0f14;
   --fg: #e4e4e7;
   --card: rgba(255, 255, 255, 0.04);
