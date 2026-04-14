@@ -14,7 +14,7 @@ const csp = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["better-sqlite3"],
+  serverExternalPackages: ["better-sqlite3", "jsdom", "@mozilla/readability"],
   async headers() {
     return [
       {

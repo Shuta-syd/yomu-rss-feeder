@@ -56,11 +56,13 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 
 COPY . .
 
+# スクリプト類のTypeScriptビルドのみ (Next.jsはrunnerでdev modeで起動)
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm build && pnpm build:scripts
+RUN pnpm build:scripts
 
 # ==============================================================================
 # runner: 本番イメージ (Proxmox デプロイ対象)
+# Next.js 16のprerender bugを回避するため、dev modeで起動する
 # ==============================================================================
 FROM base AS runner
 
@@ -70,18 +72,21 @@ ENV HOSTNAME=0.0.0.0
 ENV DATABASE_PATH=/data/yomu.db
 ENV MIGRATIONS_DIR=/app/drizzle
 
-# Next.js standalone output
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+# ソースと全依存 (dev含む) をコピー
+COPY --from=builder --chown=node:node /app/package.json /app/pnpm-lock.yaml ./
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/public ./public
-COPY --from=builder --chown=node:node /app/.next/standalone ./
-COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/src ./src
+COPY --from=builder --chown=node:node /app/tsconfig.json /app/next.config.ts /app/postcss.config.mjs /app/drizzle.config.ts ./
 
 # マイグレーション / stale-reset 用スクリプト
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/drizzle ./drizzle
 COPY --from=builder --chown=node:node /app/entrypoint.sh ./entrypoint.sh
-
-# better-sqlite3 ネイティブバイナリ
-COPY --from=deps --chown=node:node /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 
 RUN mkdir -p /data && chown node:node /data && chmod +x ./entrypoint.sh
 VOLUME ["/data"]

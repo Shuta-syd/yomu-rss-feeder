@@ -1,10 +1,22 @@
-import type { Metadata } from "next";
-import { ThemeProvider } from "next-themes";
+import type { Metadata, Viewport } from "next";
+import { Providers } from "@/components/layout/Providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Yomu",
   description: "AI-powered self-hosted RSS reader",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "Yomu",
+  },
+  icons: {
+    apple: "/icons/icon-192.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2dd4bf",
 };
 
 export default function RootLayout({
@@ -15,15 +27,14 @@ export default function RootLayout({
   return (
     <html lang="ja" suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#2dd4bf" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem("theme");var d=s==="dark"||(!s&&matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.classList.add("dark");}catch(e){}})();`,
+          }}
+        />
       </head>
       <body>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
-        </ThemeProvider>
+        <Providers>{children}</Providers>
         <script
           dangerouslySetInnerHTML={{
             __html: `if("serviceWorker"in navigator&&location.hostname!=="localhost"){navigator.serviceWorker.register("/sw.js")}`,
