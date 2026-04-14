@@ -220,33 +220,55 @@ export function ArticleDetail({ article, onChange }: Props) {
           style={{ background: "var(--ai-bg)", borderColor: "var(--ai-border)" }}
         >
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-bold" style={{ color: "var(--accent)" }}>
-              AI 要約・翻訳
+            <h2 className="flex items-center gap-2 text-sm font-bold" style={{ color: "var(--accent)" }}>
+              <span>AI 要約・翻訳</span>
+              {aiLoading && (
+                <span
+                  className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-t-transparent"
+                  style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
+                />
+              )}
             </h2>
             <button
               onClick={runAi}
               disabled={aiLoading || article.aiStage2Status === "processing"}
-              className="rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
               style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
             >
-              {aiLoading ? "処理中..." : article.aiSummaryFull ? "再生成" : "生成"}
+              {aiLoading && (
+                <span
+                  className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-t-transparent"
+                  style={{ borderColor: "var(--accent-fg)", borderTopColor: "transparent" }}
+                />
+              )}
+              <span>{aiLoading ? "処理中" : article.aiSummaryFull ? "再生成" : "生成"}</span>
             </button>
           </div>
 
-          {aiError && <p className="mb-2 text-sm text-red-500">{aiError}</p>}
+          {aiError && <p className="fade-in-up mb-2 text-sm text-red-500">{aiError}</p>}
 
-          {/* ストリーミング中の表示 */}
+          {/* ストリーミング中: 生成前は shimmer、生成中は stream を穏やかに表示 */}
+          {aiLoading && !streamText && (
+            <div className="space-y-2">
+              <div className="ai-shimmer h-3 w-3/4" />
+              <div className="ai-shimmer h-3 w-full" />
+              <div className="ai-shimmer h-3 w-5/6" />
+            </div>
+          )}
           {aiLoading && streamText && (
-            <div className="text-sm leading-relaxed whitespace-pre-wrap break-all opacity-70">
+            <div
+              className="fade-in-up text-sm leading-relaxed whitespace-pre-wrap break-words opacity-80"
+              style={{ color: "var(--muted)" }}
+            >
               {streamText}
-              <span className="ml-1 inline-block h-4 w-1 animate-pulse" style={{ background: "var(--accent)" }} />
+              <span className="cursor-blink ml-1 inline-block h-4 w-[3px] align-middle" style={{ background: "var(--accent)" }} />
             </div>
           )}
 
-          {/* 完了後の表示 */}
+          {/* 完了後の表示: 各セクションをstagger fade-in */}
           {!aiLoading && article.aiSummaryFull && (
             <div className="space-y-4">
-              <div>
+              <div className="fade-in-up" style={{ animationDelay: "0ms" }}>
                 <h3 className="mb-1.5 text-xs font-semibold" style={{ color: "var(--muted)" }}>
                   要約
                 </h3>
@@ -254,7 +276,7 @@ export function ArticleDetail({ article, onChange }: Props) {
               </div>
 
               {keyPoints.length > 0 && (
-                <div>
+                <div className="fade-in-up" style={{ animationDelay: "80ms" }}>
                   <h3 className="mb-1.5 text-xs font-semibold" style={{ color: "var(--muted)" }}>
                     キーポイント
                   </h3>
@@ -267,7 +289,7 @@ export function ArticleDetail({ article, onChange }: Props) {
               )}
 
               {relatedLinks.length > 0 && (
-                <div>
+                <div className="fade-in-up" style={{ animationDelay: "160ms" }}>
                   <h3 className="mb-1.5 text-xs font-semibold" style={{ color: "var(--muted)" }}>
                     関連リンク
                   </h3>
