@@ -84,9 +84,9 @@ fi
 # --- 4. Dockerビルド & 起動 ---
 echo "[4/6] Dockerイメージビルド & 起動..."
 cd "$INSTALL_DIR"
-# CLOUDFLARE_TUNNEL_TOKENが設定されていればtunnelプロファイルも起動
+# CLOUDFLARE_TUNNEL_TOKENが設定されていればprodオーバーレイでcloudflaredも起動
 if grep -q "^CLOUDFLARE_TUNNEL_TOKEN=..*" .env; then
-  docker compose --profile tunnel up -d --build
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 else
   docker compose up -d --build
 fi

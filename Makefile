@@ -1,5 +1,5 @@
 COMPOSE_DEV  = docker compose -f docker-compose.dev.yml
-COMPOSE_PROD = docker compose
+COMPOSE_PROD = docker compose -f docker-compose.yml -f docker-compose.prod.yml
 APP_SERVICE  = app
 
 # コンテナ内でコマンドを実行 (non-TTY)

@@ -25,7 +25,7 @@ echo "[$(date -Iseconds)] 変更検知: $LOCAL -> $REMOTE"
 # pull & rebuild
 git pull origin "$BRANCH"
 if [ -f .env ] && grep -q "^CLOUDFLARE_TUNNEL_TOKEN=..*" .env; then
-  docker compose --profile tunnel up -d --build
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 else
   docker compose up -d --build
 fi

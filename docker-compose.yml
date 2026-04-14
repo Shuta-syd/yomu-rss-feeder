@@ -24,16 +24,5 @@ services:
       retries: 3
       start_period: 20s
 
-  # Cloudflare Tunnel (Zero Trust) 経由で公開する場合に起動
-  # CLOUDFLARE_TUNNEL_TOKEN を .env に設定した上で:
-  #   docker compose up -d
-  # Cloudflare側のTunnel URL設定は http://app:3000 (サービス名で解決)
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on:
-      - app
-
 volumes:
   yomu-data:

@@ -1,0 +1,12 @@
+# 本番用オーバーレイ (Proxmox VM等でのデプロイ)
+# 使い方:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# または Makefileのprod-upを使う
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
