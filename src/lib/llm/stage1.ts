@@ -3,7 +3,7 @@ import { db } from "../db";
 import { articles } from "../db/schema";
 import { getSettings } from "../settings";
 import { createProvider, LLMBlockedError, LLMNoApiKeyError } from "./provider";
-import { STAGE1_SYSTEM, stage1UserPrompt } from "./prompts";
+import { STAGE1_SYSTEM, STAGE1_SYSTEM_JP, stage1UserPrompt, isJapaneseTitle } from "./prompts";
 import { parseAndValidate, stage1Schema } from "./parse-response";
 
 const BATCH_TIMEOUT_MS = 5 * 60 * 1000;
@@ -45,8 +45,9 @@ export async function processStage1ForArticles(articleIds: string[]): Promise<vo
       .run();
 
     try {
+      const isJp = isJapaneseTitle(article.title);
       const result = await provider.chat({
-        systemPrompt: STAGE1_SYSTEM,
+        systemPrompt: isJp ? STAGE1_SYSTEM_JP : STAGE1_SYSTEM,
         userPrompt: stage1UserPrompt(article.title, article.contentPlain ?? ""),
       });
       const parsed = parseAndValidate(result.content, stage1Schema);
