@@ -1,4 +1,4 @@
-const CACHE_NAME = "yomu-v1";
+const CACHE_NAME = "yomu-v2";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
@@ -14,11 +14,14 @@ self.addEventListener("activate", (e) => {
 });
 
 self.addEventListener("fetch", (e) => {
+  // GET以外はパススルー
+  if (e.request.method !== "GET") return;
   // API呼び出しとナビゲーション(HTML)はパススルー
   if (e.request.url.includes("/api/")) return;
   if (e.request.mode === "navigate") return;
-  // httpスキーマのみキャッシュ対象
-  if (!e.request.url.startsWith("http")) return;
+  // 同一オリジンのみキャッシュ対象 (クロスオリジン画像等は触らない)
+  const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return;
   // 静的アセットのみ: network-first, offline fallback to cache
   e.respondWith(
     fetch(e.request).then((res) => {

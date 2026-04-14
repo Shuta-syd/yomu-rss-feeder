@@ -1,6 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import type { ArticleDTO } from "@/types/article";
+
+function Thumbnail({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <img
+      src={src}
+      alt=""
+      className="h-16 w-16 shrink-0 rounded object-cover"
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 interface Props {
   articles: ArticleDTO[];
@@ -39,16 +55,7 @@ export function ArticleList({ articles, selectedId, onSelect }: Props) {
             }}
           >
             <div className="flex gap-3">
-              {a.thumbnailUrl && (
-                <img
-                  src={a.thumbnailUrl}
-                  alt=""
-                  className="h-16 w-16 shrink-0 rounded object-cover"
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-              )}
+              {a.thumbnailUrl && <Thumbnail src={a.thumbnailUrl} />}
               <div className="min-w-0 flex-1">
                 <div className="flex items-start gap-2">
                   {!a.isRead && (
