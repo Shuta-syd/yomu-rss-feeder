@@ -95,6 +95,8 @@ function parsePublished(input: string | undefined): number | null {
 
 export async function fetchFeed(feedId: string, url: string): Promise<FetchResult> {
   const now = Date.now();
+  const feedRow = db.select({ aiEnabled: feeds.aiEnabled }).from(feeds).where(eq(feeds.id, feedId)).get();
+  const aiEnabled = feedRow?.aiEnabled ?? true;
   let parsed;
   try {
     parsed = await parser.parseURL(url);
@@ -163,6 +165,7 @@ export async function fetchFeed(feedId: string, url: string): Promise<FetchResul
           `${item.title ?? ""} ${contentPlain?.slice(0, 200) ?? ""}`,
         ),
         dedupHash,
+        aiStage1Status: aiEnabled ? "pending" : "skipped",
       })
       .onConflictDoNothing({ target: [articles.feedId, articles.dedupHash] })
       .run();

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 type ProviderType = "gemini" | "openai" | "anthropic";
-type TabKey = "ai" | "notification" | "integration" | "account";
+type TabKey = "ai" | "feeds" | "notification" | "integration" | "account";
 
 interface Settings {
   hasGeminiApiKey: boolean;
@@ -55,10 +55,18 @@ function detectProvider(model: string): ProviderType {
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "ai", label: "AI" },
+  { key: "feeds", label: "フィード" },
   { key: "notification", label: "通知" },
   { key: "integration", label: "連携" },
   { key: "account", label: "アカウント" },
 ];
+
+interface FeedForSettings {
+  id: string;
+  title: string;
+  category: string;
+  aiEnabled: boolean;
+}
 
 interface ToastProps {
   message: string | null;
@@ -103,6 +111,59 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
+  const [feedList, setFeedList] = useState<FeedForSettings[]>([]);
+  const [feedFilter, setFeedFilter] = useState("");
+
+  const loadFeedList = async () => {
+    const res = await fetch("/api/feeds");
+    if (!res.ok) return;
+    const data = await res.json();
+    setFeedList(
+      (data.feeds as FeedForSettings[]).map((f) => ({
+        id: f.id,
+        title: f.title,
+        category: f.category,
+        aiEnabled: Boolean(f.aiEnabled),
+      })),
+    );
+  };
+
+  async function toggleFeedAi(id: string, next: boolean) {
+    setFeedList((prev) => prev.map((f) => (f.id === id ? { ...f, aiEnabled: next } : f)));
+    const res = await fetch(`/api/feeds/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aiEnabled: next }),
+    });
+    if (!res.ok) {
+      setToast("更新に失敗しました");
+      loadFeedList();
+    }
+  }
+
+  async function bulkToggleAi(enabled: boolean) {
+    const targets = feedList.filter((f) =>
+      feedFilter ? (f.title + f.category).toLowerCase().includes(feedFilter.toLowerCase()) : true,
+    );
+    if (targets.length === 0) return;
+    if (!confirm(`${targets.length}件のフィードをAI対象${enabled ? "に含める" : "から除外する"}？`)) return;
+    setFeedList((prev) => prev.map((f) => (targets.some((t) => t.id === f.id) ? { ...f, aiEnabled: enabled } : f)));
+    await Promise.all(
+      targets.map((f) =>
+        fetch(`/api/feeds/${f.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ aiEnabled: enabled }),
+        }),
+      ),
+    );
+    setToast(`${targets.length}件を更新しました`);
+    loadFeedList();
+  }
+
+  useEffect(() => {
+    if (activeTab === "feeds") loadFeedList();
+  }, [activeTab]);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -469,6 +530,77 @@ export default function SettingsPage() {
             >
               {saving ? "保存中..." : "保存"}
             </button>
+          </div>
+        </section>
+      )}
+
+      {/* フィードタブ: AI対象の除外設定 */}
+      {activeTab === "feeds" && (
+        <section className="mt-6 space-y-4">
+          <div className="space-y-3">
+            <h2 className={sectionTitleCls}>AI自動翻訳の対象</h2>
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              OFF にするとこのフィードの新着記事は Stage1 の自動翻訳・要約・タグ付けの対象外になります。既存の pending 記事も skipped に変換されます。
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="search"
+                placeholder="フィード名・カテゴリで絞り込み"
+                value={feedFilter}
+                onChange={(e) => setFeedFilter(e.target.value)}
+                className={`${inputCls} max-w-sm`}
+                style={inputStyle}
+              />
+              <button
+                onClick={() => bulkToggleAi(true)}
+                className="rounded px-3 py-1.5 text-xs"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              >
+                一括ON
+              </button>
+              <button
+                onClick={() => bulkToggleAi(false)}
+                className="rounded px-3 py-1.5 text-xs"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              >
+                一括OFF
+              </button>
+            </div>
+            <div
+              className="max-h-[70vh] overflow-y-auto rounded border"
+              style={{ borderColor: "var(--card-border)" }}
+            >
+              {feedList.length === 0 ? (
+                <div className="p-3 text-sm" style={{ color: "var(--muted)" }}>読み込み中...</div>
+              ) : (
+                <ul>
+                  {feedList
+                    .filter((f) =>
+                      feedFilter ? (f.title + f.category).toLowerCase().includes(feedFilter.toLowerCase()) : true,
+                    )
+                    .map((f) => (
+                      <li
+                        key={f.id}
+                        className="flex items-center gap-3 border-b px-3 py-2 text-sm last:border-b-0"
+                        style={{ borderColor: "var(--card-border)" }}
+                      >
+                        <label className="flex flex-1 cursor-pointer items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={f.aiEnabled}
+                            onChange={(e) => toggleFeedAi(f.id, e.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          <span className="min-w-0 flex-1 truncate">{f.title}</span>
+                          <span className="shrink-0 text-xs" style={{ color: "var(--muted)" }}>
+                            {f.category}
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
           </div>
         </section>
       )}

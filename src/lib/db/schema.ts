@@ -20,6 +20,7 @@ export const feeds = sqliteTable(
     lastFetchStatus: text("last_fetch_status").notNull().default("pending"),
     lastFetchError: text("last_fetch_error"),
     consecutiveFetchFailures: integer("consecutive_fetch_failures").notNull().default(0),
+    aiEnabled: integer("ai_enabled", { mode: "boolean" }).notNull().default(true),
     createdAt: integer("created_at")
       .notNull()
       .$defaultFn(() => Date.now()),
