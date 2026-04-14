@@ -84,8 +84,8 @@ db-studio: ## Drizzle Studio 起動
 prod-build: ## 本番イメージビルド
 	$(COMPOSE_PROD) build
 
-prod-up: ## 本番コンテナ起動
-	$(COMPOSE_PROD) up -d
+prod-up: ## 本番コンテナ起動 (必要ならビルドも実行)
+	$(COMPOSE_PROD) up -d --build
 
 prod-down: ## 本番コンテナ停止
 	$(COMPOSE_PROD) down
