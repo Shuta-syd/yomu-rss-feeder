@@ -59,9 +59,16 @@ if [ ! -f "$INSTALL_DIR/.env" ]; then
     VAPID_PRIVATE="TODO_RUN_MAKE_VAPID_KEYS"
   fi
 
-  # Cloudflare Tunnel Token (任意)
-  echo "    Cloudflare Tunnel Token を入力してください (未使用ならEnterでスキップ):"
-  read -r CLOUDFLARE_TUNNEL_TOKEN
+  # Cloudflare Tunnel Token (環境変数優先、なければ対話入力)
+  if [ -z "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]; then
+    if [ -t 0 ] || [ -r /dev/tty ]; then
+      echo "    Cloudflare Tunnel Token を入力してください (未使用ならEnterでスキップ):"
+      read -r CLOUDFLARE_TUNNEL_TOKEN </dev/tty || CLOUDFLARE_TUNNEL_TOKEN=""
+    else
+      echo "    Cloudflare Tunnel Token なしで進めます (後で .env に追記してください)"
+      CLOUDFLARE_TUNNEL_TOKEN=""
+    fi
+  fi
 
   cat > "$INSTALL_DIR/.env" <<EOF
 ENCRYPTION_KEY=$ENCRYPTION_KEY
