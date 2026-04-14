@@ -177,28 +177,28 @@ export default function FeedsPage() {
             ⚙
           </a>
         </div>
-        {aiStatus && (aiStatus.pending > 0 || aiStatus.processing > 0 || aiStatus.failed > 0) && (
+        {aiStatus && (aiStatus.pending > 0 || aiStatus.processing > 0) && (
           <div
-            className="flex flex-col gap-0.5 border-b px-3 py-1.5 text-xs"
+            className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
             style={{ borderColor: "var(--card-border)", background: "var(--ai-bg)", color: "var(--muted)" }}
           >
-            <div className="flex items-center gap-2">
-              {aiStatus.processing > 0 && (
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--accent)" }} />
-                  <span>処理中 {aiStatus.processing}</span>
+            {aiStatus.processing > 0 && aiStatus.currentFeedTitle ? (
+              <>
+                <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full" style={{ background: "var(--accent)" }} />
+                <span className="shrink-0" style={{ color: "var(--accent)" }}>翻訳中</span>
+                <span className="min-w-0 flex-1 truncate font-medium" title={`${aiStatus.currentFeedTitle} / ${aiStatus.currentTitle ?? ""}`}>
+                  {aiStatus.currentFeedTitle}
+                  {aiStatus.currentTitle && <span className="ml-1 opacity-60">― {aiStatus.currentTitle}</span>}
                 </span>
-              )}
-              {aiStatus.pending > 0 && <span>待機 {aiStatus.pending}</span>}
-              {aiStatus.failed > 0 && <span style={{ color: "#f87171" }}>失敗 {aiStatus.failed}</span>}
-            </div>
-            {aiStatus.currentTitle && (
-              <div className="truncate" title={aiStatus.currentTitle}>
-                <span style={{ color: "var(--accent)" }}>▸</span>{" "}
-                {aiStatus.currentFeedTitle && <span className="opacity-70">[{aiStatus.currentFeedTitle}]</span>}{" "}
-                {aiStatus.currentTitle}
-              </div>
+                <span className="shrink-0 opacity-70">残り {aiStatus.pending}</span>
+              </>
+            ) : (
+              <>
+                <span className="inline-block h-2 w-2 shrink-0 rounded-full opacity-40" style={{ background: "var(--muted)" }} />
+                <span className="opacity-70">待機 {aiStatus.pending} (次tickで再開)</span>
+              </>
             )}
+            {aiStatus.failed > 0 && <span className="shrink-0" style={{ color: "#f87171" }}>失敗 {aiStatus.failed}</span>}
           </div>
         )}
         <div className="flex-1 overflow-hidden">
