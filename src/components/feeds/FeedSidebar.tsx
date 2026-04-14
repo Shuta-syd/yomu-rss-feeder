@@ -126,7 +126,10 @@ export function FeedSidebar({
       style={{ background: "var(--sidebar-bg)", borderColor: "var(--card-border)" }}
     >
       <div className="flex items-center justify-between border-b p-3" style={{ borderColor: "var(--card-border)" }}>
-        <h1 className="font-semibold">Yomu</h1>
+        <h1 className="flex items-center gap-1.5 font-semibold">
+          <img src="/icons/icon.svg" alt="" className="h-5 w-5 rounded" />
+          <span>Yomu</span>
+        </h1>
         <div className="flex gap-1">
           {!selectMode && (
             <>
