@@ -26,7 +26,8 @@ export default function FeedsPage() {
   const [aiStatus, setAiStatus] = useState<{ pending: number; processing: number; failed: number; currentTitle: string | null; currentFeedTitle: string | null } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileView, setMobileView] = useState<"sidebar" | "list" | "detail">("list");
-  const [view, setView] = useState<"feeds" | "likes">("feeds");
+  const [view, setView] = useState<"feeds" | "likes" | "starred">("feeds");
+  const [markingRead, setMarkingRead] = useState(false);
   const [likes, setLikes] = useState<XLike[]>([]);
   const [likesLoading, setLikesLoading] = useState(false);
   const [likesFetching, setLikesFetching] = useState(false);
@@ -84,6 +85,7 @@ export default function FeedsPage() {
     const params = new URLSearchParams();
     if (selectedFeedId) params.set("feedId", selectedFeedId);
     if (search) params.set("search", search);
+    if (view === "starred") params.set("isStarred", "true");
     const res = await fetch(`/api/articles?${params}`);
     if (res.status === 401) {
       router.replace("/login");
@@ -91,7 +93,7 @@ export default function FeedsPage() {
     }
     const data = await res.json();
     setArticles(data.articles);
-  }, [selectedFeedId, search, router]);
+  }, [selectedFeedId, search, view, router]);
 
   useEffect(() => {
     loadFeeds();
@@ -167,6 +169,22 @@ export default function FeedsPage() {
     };
   }, [aiStatus?.pending, aiStatus?.processing, loadArticles]);
 
+  async function markAllRead() {
+    setMarkingRead(true);
+    const body: Record<string, string> = {};
+    if (selectedFeedId) body.feedId = selectedFeedId;
+    const res = await fetch("/api/articles/mark-all-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setMarkingRead(false);
+    if (res.ok) {
+      loadArticles();
+      loadFeeds();
+    }
+  }
+
   async function sync() {
     setSyncing(true);
     const res = await fetch("/api/sync", { method: "POST" });
@@ -240,11 +258,17 @@ export default function FeedsPage() {
             setSelected(null);
             if (isMobile) goToMobileView("list");
           }}
+          onSelectStarred={() => {
+            setView("starred");
+            setSelectedFeedId(null);
+            setSelected(null);
+            if (isMobile) goToMobileView("list");
+          }}
         />
       </div>
       <section
-        key={isMobile ? `list-${mobileView}` : "list"}
-        className={`${showList ? "flex" : "hidden"} ${isMobile ? `w-full ${slideClass}` : `shrink-0 ${listWidth === null ? "w-96" : ""}`} flex-col`}
+        key="list"
+        className={`${showList ? "flex" : "hidden"} ${isMobile ? `w-full ${mobileView === "list" ? slideClass : ""}` : `shrink-0 ${listWidth === null ? "w-96" : ""}`} flex-col`}
         style={!isMobile && listWidth !== null ? { width: listWidth } : undefined}
       >
         <div
@@ -261,15 +285,26 @@ export default function FeedsPage() {
               ☰
             </button>
           )}
-          {view === "feeds" ? (
-            <input
-              type="search"
-              placeholder="検索..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 rounded px-2 py-1 text-sm"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-            />
+          {view !== "likes" ? (
+            <>
+              <input
+                type="search"
+                placeholder="検索..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 rounded px-2 py-1 text-sm"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              />
+              <button
+                onClick={markAllRead}
+                disabled={markingRead || articles.every((a) => a.isRead)}
+                className="rounded px-2 py-1 text-xs disabled:opacity-40"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                title="表示中をすべて既読"
+              >
+                {markingRead ? "..." : "全て既読"}
+              </button>
+            </>
           ) : (
             <>
               <span className="flex-1 text-sm font-semibold">X いいね</span>
@@ -311,7 +346,7 @@ export default function FeedsPage() {
           </div>
         )}
         <div className="flex-1 overflow-hidden">
-          {view === "feeds" ? (
+          {view !== "likes" ? (
             <ArticleList
               articles={articles}
               selectedId={selected?.id ?? null}
@@ -367,7 +402,7 @@ export default function FeedsPage() {
           </div>
         )}
         <div className="flex-1 overflow-hidden">
-          {view === "feeds" ? (
+          {view !== "likes" ? (
             <ArticleDetail
               article={selected}
               onChange={(a) => {

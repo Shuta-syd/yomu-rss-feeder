@@ -14,8 +14,9 @@ interface Props {
   onFeedMoved?: () => void;
   onFeedsDeleted?: () => void;
   isMobile?: boolean;
-  view?: "feeds" | "likes";
+  view?: "feeds" | "likes" | "starred";
   onSelectLikes?: () => void;
+  onSelectStarred?: () => void;
 }
 
 export function FeedSidebar({
@@ -31,6 +32,7 @@ export function FeedSidebar({
   isMobile,
   view = "feeds",
   onSelectLikes,
+  onSelectStarred,
 }: Props) {
   const grouped = feeds.reduce<Record<string, FeedWithUnread[]>>((acc, f) => {
     (acc[f.category] ??= []).push(f);
@@ -201,6 +203,18 @@ export function FeedSidebar({
             >
               <span>すべて</span>
               <span style={{ color: "var(--muted)" }}>{totalUnread}</span>
+            </button>
+            <button
+              onClick={() => onSelectStarred?.()}
+              className="flex w-full items-center gap-2 rounded px-2 py-1"
+              style={{
+                background:
+                  view === "starred" ? "var(--accent-subtle)" : "transparent",
+                color: view === "starred" ? "inherit" : "var(--muted)",
+              }}
+            >
+              <span className="text-yellow-500">★</span>
+              <span>お気に入り</span>
             </button>
             <button
               onClick={() => onSelectLikes?.()}
