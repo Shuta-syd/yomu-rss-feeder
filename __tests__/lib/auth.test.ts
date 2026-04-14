@@ -19,6 +19,7 @@ import {
   checkRateLimit,
   _resetRateLimitForTest,
   clientIpFromHeaders,
+  generateUid,
 } from "@/lib/auth";
 
 describe("hashToken", () => {
@@ -57,6 +58,23 @@ describe("checkRateLimit", () => {
   it("異なるキーは独立してカウント", () => {
     for (let i = 0; i < 5; i++) checkRateLimit("login:a", 5);
     expect(() => checkRateLimit("login:b", 5)).not.toThrow();
+  });
+});
+
+describe("generateUid", () => {
+  it("10桁の数字を返す", () => {
+    const uid = generateUid();
+    expect(uid).toMatch(/^\d{10}$/);
+  });
+  it("先頭が0でない", () => {
+    for (let i = 0; i < 50; i++) {
+      expect(generateUid()[0]).not.toBe("0");
+    }
+  });
+  it("複数回呼んで異なるUIDが返る (衝突確率は極めて低い)", () => {
+    const set = new Set<string>();
+    for (let i = 0; i < 20; i++) set.add(generateUid());
+    expect(set.size).toBe(20);
   });
 });
 

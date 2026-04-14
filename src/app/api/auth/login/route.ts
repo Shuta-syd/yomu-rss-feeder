@@ -4,11 +4,12 @@ import {
   checkRateLimit,
   clientIpFromHeaders,
   issueSession,
-  verifyPassword,
+  verifyCredentials,
 } from "@/lib/auth";
 
 const bodySchema = z.object({
-  password: z.string().min(1).max(256),
+  uid: z.string().regex(/^\d{10}$/),
+  password: z.string().min(8).max(256),
 });
 
 export async function POST(req: NextRequest) {
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const ok = await verifyPassword(parsed.data.password);
+  const ok = await verifyCredentials(parsed.data.uid, parsed.data.password);
   if (!ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes, createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { appConfig } from "./db/schema";
@@ -32,19 +32,45 @@ export function isSetupCompleted(): boolean {
   return getConfig("setup_completed") === "true";
 }
 
-export async function completeSetup(password: string): Promise<void> {
+export function generateUid(): string {
+  // 10桁、先頭は1-9 (0だと見た目8桁になる)
+  const first = randomInt(1, 10);
+  let rest = "";
+  for (let i = 0; i < 9; i++) rest += randomInt(0, 10);
+  return `${first}${rest}`;
+}
+
+export function getUid(): string | null {
+  return getConfig("uid") ?? null;
+}
+
+export async function completeSetup(password: string): Promise<{ uid: string }> {
   if (isSetupCompleted()) {
     throw new Response("Setup already completed", { status: 409 });
   }
   const hash = await bcrypt.hash(password, 12);
+  const uid = generateUid();
   setConfig("password_hash", hash);
+  setConfig("uid", uid);
   setConfig("setup_completed", "true");
+  return { uid };
 }
 
-export async function verifyPassword(password: string): Promise<boolean> {
-  const stored = getConfig("password_hash");
-  if (!stored) return false;
-  return bcrypt.compare(password, stored);
+function safeEqualString(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
+export async function verifyCredentials(uid: string, password: string): Promise<boolean> {
+  const storedUid = getConfig("uid");
+  const storedHash = getConfig("password_hash");
+  // UIDが不一致でも bcrypt.compare を実行し、タイミング差を抑える
+  const dummyHash = "$2a$12$CwTycUXWue0Thq9StjUM0uJ8B8h0kq9lC4z7Lq7HkYyXqP6V.dGXa";
+  const uidOk = storedUid != null && safeEqualString(uid, storedUid);
+  const passwordOk = await bcrypt.compare(password, storedHash ?? dummyHash);
+  return Boolean(uidOk && passwordOk && storedHash);
 }
 
 export async function issueSession(): Promise<void> {

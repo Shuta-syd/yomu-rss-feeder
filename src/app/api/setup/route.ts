@@ -33,12 +33,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  let uid: string;
   try {
-    await completeSetup(parsed.data.password);
+    const result = await completeSetup(parsed.data.password);
+    uid = result.uid;
   } catch (e) {
     if (e instanceof Response) return e;
     throw e;
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, uid });
 }
