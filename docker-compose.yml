@@ -6,6 +6,8 @@ services:
       target: runner
     image: yomu:latest
     restart: unless-stopped
+    expose:
+      - "3000"
     ports:
       - "3000:3000"
     volumes:
@@ -14,12 +16,27 @@ services:
       NODE_ENV: production
       DATABASE_URL: file:/data/yomu.db
       TZ: Asia/Tokyo
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # Cloudflare Tunnel (Zero Trust) 経由で外部公開する場合のみ起動
+  # 起動方法: CLOUDFLARE_TUNNEL_TOKEN を設定した上で
+  #   docker compose --profile tunnel up -d
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - app
+    profiles:
+      - tunnel
 
 volumes:
   yomu-data:

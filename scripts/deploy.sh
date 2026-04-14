@@ -24,6 +24,10 @@ echo "[$(date -Iseconds)] 変更検知: $LOCAL -> $REMOTE"
 
 # pull & rebuild
 git pull origin "$BRANCH"
-docker compose up -d --build
+if [ -f .env ] && grep -q "^CLOUDFLARE_TUNNEL_TOKEN=..*" .env; then
+  docker compose --profile tunnel up -d --build
+else
+  docker compose up -d --build
+fi
 
 echo "[$(date -Iseconds)] デプロイ完了"

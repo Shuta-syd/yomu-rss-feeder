@@ -59,10 +59,15 @@ if [ ! -f "$INSTALL_DIR/.env" ]; then
     VAPID_PRIVATE="TODO_RUN_MAKE_VAPID_KEYS"
   fi
 
+  # Cloudflare Tunnel Token (任意)
+  echo "    Cloudflare Tunnel Token を入力してください (未使用ならEnterでスキップ):"
+  read -r CLOUDFLARE_TUNNEL_TOKEN
+
   cat > "$INSTALL_DIR/.env" <<EOF
 ENCRYPTION_KEY=$ENCRYPTION_KEY
 VAPID_PUBLIC_KEY=$VAPID_PUBLIC
 VAPID_PRIVATE_KEY=$VAPID_PRIVATE
+CLOUDFLARE_TUNNEL_TOKEN=$CLOUDFLARE_TUNNEL_TOKEN
 EOF
   echo "    .env を生成しました"
 else
@@ -72,7 +77,12 @@ fi
 # --- 4. Dockerビルド & 起動 ---
 echo "[4/6] Dockerイメージビルド & 起動..."
 cd "$INSTALL_DIR"
-docker compose up -d --build
+# CLOUDFLARE_TUNNEL_TOKENが設定されていればtunnelプロファイルも起動
+if grep -q "^CLOUDFLARE_TUNNEL_TOKEN=..*" .env; then
+  docker compose --profile tunnel up -d --build
+else
+  docker compose up -d --build
+fi
 
 # --- 5. 自動デプロイ用cron登録 ---
 DEPLOY_SCRIPT="$INSTALL_DIR/scripts/deploy.sh"
