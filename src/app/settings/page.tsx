@@ -99,8 +99,10 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [xClientId, setXClientId] = useState("");
+  const [xClientSecret, setXClientSecret] = useState("");
   const [xConnected, setXConnected] = useState(false);
   const [xHasClientId, setXHasClientId] = useState(false);
+  const [xHasClientSecret, setXHasClientSecret] = useState(false);
   const [xSaving, setXSaving] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -191,6 +193,7 @@ export default function SettingsPage() {
         if (d) {
           setXConnected(d.connected);
           setXHasClientId(d.hasClientId);
+          setXHasClientSecret(!!d.hasClientSecret);
         }
       });
   }, [router]);
@@ -304,18 +307,27 @@ export default function SettingsPage() {
   }
 
   async function saveXClientId() {
-    if (!xClientId) return;
+    if (!xClientId && !xClientSecret) return;
     setXSaving(true);
+    const body: Record<string, string> = {};
+    if (xClientId) body.xClientId = xClientId;
+    if (xClientSecret) body.xClientSecret = xClientSecret;
     const res = await fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ xClientId }),
+      body: JSON.stringify(body),
     });
     setXSaving(false);
     if (res.ok) {
-      setXClientId("");
-      setXHasClientId(true);
-      setToast("Client ID を保存しました");
+      if (xClientId) {
+        setXClientId("");
+        setXHasClientId(true);
+      }
+      if (xClientSecret) {
+        setXClientSecret("");
+        setXHasClientSecret(true);
+      }
+      setToast("保存しました");
     } else {
       setToast("保存失敗");
     }
@@ -664,18 +676,31 @@ export default function SettingsPage() {
             <h2 className={sectionTitleCls}>X (Twitter) 連携</h2>
             <div>
               <label className={labelCls}>X Client ID</label>
+              <input
+                type="text"
+                placeholder={xHasClientId ? "(設定済み) 変更する場合のみ入力" : "未設定"}
+                value={xClientId}
+                onChange={(e) => setXClientId(e.target.value)}
+                className="w-full rounded border px-3 py-2"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>
+                X Client Secret (Confidential clientのみ)
+              </label>
               <div className="flex gap-2">
                 <input
-                  type="text"
-                  placeholder={xHasClientId ? "(設定済み) 変更する場合のみ入力" : "未設定"}
-                  value={xClientId}
-                  onChange={(e) => setXClientId(e.target.value)}
+                  type="password"
+                  placeholder={xHasClientSecret ? "(設定済み) 変更する場合のみ入力" : "Public clientなら未入力でOK"}
+                  value={xClientSecret}
+                  onChange={(e) => setXClientSecret(e.target.value)}
                   className="flex-1 rounded border px-3 py-2"
                   style={inputStyle}
                 />
                 <button
                   onClick={saveXClientId}
-                  disabled={xSaving || !xClientId}
+                  disabled={xSaving || (!xClientId && !xClientSecret)}
                   className={primaryBtnCls}
                   style={primaryBtnStyle}
                 >

@@ -89,6 +89,7 @@ export interface SettingsUpdate {
   theme?: Settings["theme"];
   autoMarkAsRead?: boolean;
   xClientId?: string;
+  xClientSecret?: string | null;
 }
 
 function updateApiKey(dbKey: string, value: string | null | undefined): void {
@@ -113,6 +114,13 @@ export function updateSettings(input: SettingsUpdate): Settings {
     set("auto_mark_as_read", input.autoMarkAsRead ? "true" : "false");
   }
   if (input.xClientId) set("x_client_id", input.xClientId);
+  if (input.xClientSecret !== undefined) {
+    if (input.xClientSecret === null || input.xClientSecret === "") {
+      del("x_client_secret");
+    } else {
+      set("x_client_secret", encrypt(input.xClientSecret));
+    }
+  }
   return getSettings();
 }
 

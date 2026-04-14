@@ -25,6 +25,20 @@ export function setXClientId(id: string): void {
   set("x_client_id", id);
 }
 
+export function getXClientSecret(): string | null {
+  const enc = get("x_client_secret");
+  return enc ? decrypt(enc) : null;
+}
+export function setXClientSecret(secret: string): void {
+  set("x_client_secret", encrypt(secret));
+}
+export function hasXClientSecret(): boolean {
+  return get("x_client_secret") !== undefined;
+}
+export function clearXClientSecret(): void {
+  del("x_client_secret");
+}
+
 export function getXAccessToken(): string | null {
   const enc = get("x_access_token");
   return enc ? decrypt(enc) : null;
@@ -101,10 +115,18 @@ export async function exchangeCode(
   code: string,
   redirectUri: string,
   codeVerifier: string,
+  clientSecret?: string | null,
 ): Promise<{ accessToken: string; refreshToken: string }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  if (clientSecret) {
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+    headers["Authorization"] = `Basic ${basic}`;
+  }
   const res = await fetch("https://api.x.com/2/oauth2/token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers,
     body: new URLSearchParams({
       grant_type: "authorization_code",
       client_id: clientId,

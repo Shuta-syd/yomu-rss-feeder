@@ -24,6 +24,7 @@ const bodySchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
   autoMarkAsRead: z.boolean().optional(),
   xClientId: z.string().optional(),
+  xClientSecret: z.string().nullable().optional(),
 });
 
 export async function PUT(req: NextRequest) {

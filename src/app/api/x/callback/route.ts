@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import {
   getXClientId,
+  getXClientSecret,
   getPendingAuth,
   clearPendingAuth,
   exchangeCode,
@@ -54,6 +55,7 @@ export async function GET(req: NextRequest) {
       code,
       redirectUri,
       pending.codeVerifier,
+      getXClientSecret(),
     );
 
     setXAccessToken(accessToken);
