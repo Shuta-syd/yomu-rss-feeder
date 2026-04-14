@@ -312,16 +312,26 @@ export function ArticleDetail({ article, onChange }: Props) {
             {showTranslation && article.aiTranslation ? (
               <div
                 className="prose prose-neutral max-w-none dark:prose-invert
-                  prose-p:leading-7 prose-p:text-[15px]"
+                  prose-headings:font-bold prose-headings:tracking-tight
+                  prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+                  prose-p:leading-7 prose-p:text-[15px]
+                  prose-a:underline prose-a:underline-offset-2
+                  prose-img:rounded-lg prose-img:shadow-sm
+                  prose-pre:rounded-lg prose-pre:text-sm
+                  prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
+                  prose-blockquote:border-l-2 prose-blockquote:not-italic
+                  prose-li:leading-7"
                 style={
                   {
                     "--tw-prose-body": "var(--fg)",
                     "--tw-prose-headings": "var(--fg)",
+                    "--tw-prose-links": "var(--accent)",
+                    "--tw-prose-quotes": "var(--muted)",
+                    "--tw-prose-quote-borders": "var(--accent)",
                   } as React.CSSProperties
                 }
-              >
-                <p className="whitespace-pre-wrap">{article.aiTranslation}</p>
-              </div>
+                dangerouslySetInnerHTML={{ __html: article.aiTranslation }}
+              />
             ) : (
               <div
                 className="prose prose-neutral max-w-none dark:prose-invert

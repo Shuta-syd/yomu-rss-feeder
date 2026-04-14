@@ -7,6 +7,7 @@ import { getSettings } from "@/lib/settings";
 import { createProvider, LLMNoApiKeyError } from "@/lib/llm/provider";
 import { STAGE2_SYSTEM, stage2UserPrompt } from "@/lib/llm/prompts";
 import { parseAndValidate, stage2Schema } from "@/lib/llm/parse-response";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 export async function POST(
   _req: NextRequest,
@@ -64,10 +65,15 @@ export async function POST(
 
           const parsed = parseAndValidate(fullContent, stage2Schema);
 
+          // 翻訳はHTMLで返される想定なのでサニタイズする
+          const translationHtml = parsed.translation
+            ? sanitizeHtml(parsed.translation)
+            : null;
+
           db.update(articles)
             .set({
               aiSummaryFull: parsed.summaryFull,
-              aiTranslation: parsed.translation,
+              aiTranslation: translationHtml,
               aiKeyPoints: JSON.stringify(parsed.keyPoints),
               aiRelatedLinks: JSON.stringify(parsed.relatedLinks),
               aiStage2Status: "done",
