@@ -401,10 +401,10 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* タブバー */}
+      {/* タブバー (モバイルは横スクロール、折り返さない) */}
       <div
-        className="flex gap-1 border-b"
-        style={{ borderColor: "var(--card-border)" }}
+        className="-mx-4 flex gap-1 overflow-x-auto border-b px-4 md:mx-0 md:px-0"
+        style={{ borderColor: "var(--card-border)", scrollbarWidth: "none" }}
         role="tablist"
       >
         {TABS.map((t) => {
@@ -415,7 +415,7 @@ export default function SettingsPage() {
               role="tab"
               aria-selected={active}
               onClick={() => setActiveTab(t.key)}
-              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+              className={`shrink-0 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                 active ? "" : "border-transparent"
               }`}
               style={{
