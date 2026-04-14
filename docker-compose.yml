@@ -11,7 +11,8 @@ services:
     volumes:
       - yomu-data:/data
     environment:
-      NODE_ENV: production
+      # dev modeで起動するためNODE_ENV=development (Next.js 16のprerender bug回避)
+      NODE_ENV: development
       DATABASE_URL: file:/data/yomu.db
       TZ: Asia/Tokyo
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}

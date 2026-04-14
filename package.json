@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "build": "next build",
     "build:scripts": "tsc -p tsconfig.scripts.json",
     "start": "node server.js",
     "lint": "next lint",
