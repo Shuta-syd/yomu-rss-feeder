@@ -134,12 +134,12 @@ export function ArticleDetail({ article, onChange }: Props) {
     <article className="h-full overflow-y-auto">
       {/* ヘッダー */}
       <header
-        className="sticky top-0 z-10 border-b px-6 py-4"
+        className="sticky top-0 z-10 border-b px-4 py-3 md:px-6 md:py-4"
         style={{ background: "var(--bg)", borderColor: "var(--card-border)" }}
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold leading-snug">
+            <h1 className="text-base font-bold leading-snug md:text-lg">
               {article.aiTitleJa ?? article.title}
             </h1>
             {article.aiTitleJa && (
@@ -166,11 +166,11 @@ export function ArticleDetail({ article, onChange }: Props) {
               </a>
             </div>
           </div>
-          <div className="flex shrink-0 gap-1.5">
+          <div className="flex shrink-0 gap-1.5 overflow-x-auto">
             <button
               onClick={runStage1}
               disabled={stage1Loading || article.aiStage1Status === "processing"}
-              className="rounded-md px-2.5 py-1.5 text-xs transition-colors disabled:opacity-50"
+              className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors disabled:opacity-50"
               style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
               title="タイトル翻訳・要約・タグを再生成"
             >
@@ -178,7 +178,7 @@ export function ArticleDetail({ article, onChange }: Props) {
             </button>
             <button
               onClick={() => toggle("isStarred", !article.isStarred)}
-              className="rounded-md px-2.5 py-1.5 text-sm transition-colors"
+              className="shrink-0 rounded-md px-2.5 py-1.5 text-sm transition-colors"
               style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
               title={article.isStarred ? "スター解除" : "スター"}
             >
@@ -186,7 +186,7 @@ export function ArticleDetail({ article, onChange }: Props) {
             </button>
             <button
               onClick={() => toggle("isRead", !article.isRead)}
-              className="rounded-md px-2.5 py-1.5 text-xs transition-colors"
+              className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
               style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
             >
               {article.isRead ? "未読に戻す" : "既読にする"}
@@ -213,7 +213,7 @@ export function ArticleDetail({ article, onChange }: Props) {
         )}
       </header>
 
-      <div className="mx-auto max-w-3xl px-6 py-6">
+      <div className="mx-auto max-w-3xl px-4 py-5 md:px-6 md:py-6">
         {/* AI 要約・翻訳パネル */}
         <section
           className="mb-8 rounded-lg border p-5"
