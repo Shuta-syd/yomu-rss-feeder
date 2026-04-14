@@ -6,11 +6,8 @@ services:
       target: runner
     image: yomu:latest
     restart: unless-stopped
-    expose:
-      - "3000"
-    # ホスト公開はCloudflare Tunnel経由を想定。ローカル直接アクセスが必要なら以下を有効化:
-    # ports:
-    #   - "3000:3000"
+    ports:
+      - "3300:3000"
     volumes:
       - yomu-data:/data
     environment:
@@ -27,17 +24,8 @@ services:
       retries: 3
       start_period: 20s
 
-  # Cloudflare Tunnel (Zero Trust) 経由で外部公開する場合のみ起動
-  # 起動方法: CLOUDFLARE_TUNNEL_TOKEN を設定した上で
-  #   docker compose --profile tunnel up -d
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
-    depends_on:
-      - app
-    profiles:
-      - tunnel
+  # 注: cloudflared は別コンテナ(VMホスト上)で稼働している前提
+  # Cloudflare側のTunnel URL設定は http://172.17.0.1:3300 にする
 
 volumes:
   yomu-data:
