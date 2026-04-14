@@ -12,4 +12,5 @@ coverage
 data/
 drizzle/meta/_journal.json.bak
 next-env.d.ts
+tsconfig.tsbuildinfo
 .claude/
