@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { v7 as uuidv7 } from "uuid";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { feeds, articles } from "@/lib/db/schema";
 import { withAuth, jsonError } from "@/lib/api-helpers";
@@ -76,5 +76,23 @@ export async function POST(req: NextRequest) {
 
     const row = db.select().from(feeds).where(eq(feeds.id, id)).get();
     return NextResponse.json(row, { status: 201 });
+  });
+}
+
+const bulkDeleteSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(1000),
+});
+
+export async function DELETE(req: NextRequest) {
+  return withAuth(async () => {
+    const json = await req.json().catch(() => null);
+    const parsed = bulkDeleteSchema.safeParse(json);
+    if (!parsed.success) return jsonError(400, "Invalid request");
+
+    const result = db
+      .delete(feeds)
+      .where(inArray(feeds.id, parsed.data.ids))
+      .run();
+    return NextResponse.json({ deleted: result.changes });
   });
 }

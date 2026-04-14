@@ -122,6 +122,12 @@ export default function FeedsPage() {
         syncing={syncing}
         onLogout={logout}
         onFeedMoved={loadFeeds}
+        onFeedsDeleted={() => {
+          loadFeeds();
+          loadArticles();
+          setSelected(null);
+          setSelectedFeedId(null);
+        }}
       />
       <section
         className={`flex shrink-0 flex-col ${listWidth === null ? "w-96" : ""}`}

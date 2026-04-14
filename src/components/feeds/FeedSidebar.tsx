@@ -1,7 +1,7 @@
 "use client";
 
 import type { FeedWithUnread } from "@/types/feed";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
 interface Props {
   feeds: FeedWithUnread[];
@@ -12,6 +12,7 @@ interface Props {
   syncing: boolean;
   onLogout: () => void;
   onFeedMoved?: () => void;
+  onFeedsDeleted?: () => void;
 }
 
 export function FeedSidebar({
@@ -23,6 +24,7 @@ export function FeedSidebar({
   syncing,
   onLogout,
   onFeedMoved,
+  onFeedsDeleted,
 }: Props) {
   const grouped = feeds.reduce<Record<string, FeedWithUnread[]>>((acc, f) => {
     (acc[f.category] ??= []).push(f);
@@ -32,6 +34,72 @@ export function FeedSidebar({
   const totalUnread = feeds.reduce((n, f) => n + (f.unreadCount ?? 0), 0);
 
   const [dragFeedId, setDragFeedId] = useState<string | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+
+  const allFeedIds = useMemo(() => feeds.map((f) => f.id), [feeds]);
+  const allSelected = selectedIds.size > 0 && selectedIds.size === allFeedIds.length;
+
+  function enterSelectMode() {
+    setSelectMode(true);
+    setSelectedIds(new Set());
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function toggleOne(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleCategory(cat: string) {
+    const ids = grouped[cat]!.map((f) => f.id);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allOn = ids.every((id) => next.has(id));
+      if (allOn) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelectedIds((prev) =>
+      prev.size === allFeedIds.length ? new Set() : new Set(allFeedIds),
+    );
+  }
+
+  async function deleteSelected() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!confirm(`${ids.length}件のフィードを削除します。記事も全て消えます。よろしいですか？`)) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/feeds", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        alert("削除に失敗しました");
+        return;
+      }
+      exitSelectMode();
+      onFeedsDeleted?.();
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function moveFeedToCategory(feedId: string, newCategory: string) {
     const res = await fetch(`/api/feeds/${feedId}`, {
@@ -60,43 +128,77 @@ export function FeedSidebar({
       <div className="flex items-center justify-between border-b p-3" style={{ borderColor: "var(--card-border)" }}>
         <h1 className="font-semibold">Yomu</h1>
         <div className="flex gap-1">
-          <button
-            onClick={onSync}
-            disabled={syncing}
-            className="rounded px-2 py-1 text-xs"
-            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-          >
-            {syncing ? "..." : "↻"}
-          </button>
-          <button
-            onClick={onLogout}
-            className="rounded px-2 py-1 text-xs"
-            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-            title="Logout"
-          >
-            ⎋
-          </button>
+          {!selectMode && (
+            <>
+              <button
+                onClick={enterSelectMode}
+                className="rounded px-2 py-1 text-xs"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                title="フィードを選択して一括削除"
+              >
+                ☑
+              </button>
+              <button
+                onClick={onSync}
+                disabled={syncing}
+                className="rounded px-2 py-1 text-xs"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              >
+                {syncing ? "..." : "↻"}
+              </button>
+              <button
+                onClick={onLogout}
+                className="rounded px-2 py-1 text-xs"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                title="Logout"
+              >
+                ⎋
+              </button>
+            </>
+          )}
+          {selectMode && (
+            <span className="text-xs" style={{ color: "var(--muted)" }}>
+              選択モード
+            </span>
+          )}
         </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
-        <button
-          onClick={() => onSelect(null)}
-          className="flex w-full items-center justify-between rounded px-2 py-1"
-          style={{
-            background: selectedFeedId === null ? "var(--accent-subtle)" : "transparent",
-          }}
-        >
-          <span>すべて</span>
-          <span style={{ color: "var(--muted)" }}>{totalUnread}</span>
-        </button>
-        <a
-          href="/x"
-          className="flex w-full items-center rounded px-2 py-1"
-          style={{ color: "var(--muted)" }}
-        >
-          X いいね
-        </a>
+        {selectMode ? (
+          <label className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleAll}
+              className="h-3.5 w-3.5"
+            />
+            <span>全選択</span>
+            <span className="ml-auto" style={{ color: "var(--muted)" }}>
+              {selectedIds.size}/{allFeedIds.length}
+            </span>
+          </label>
+        ) : (
+          <>
+            <button
+              onClick={() => onSelect(null)}
+              className="flex w-full items-center justify-between rounded px-2 py-1"
+              style={{
+                background: selectedFeedId === null ? "var(--accent-subtle)" : "transparent",
+              }}
+            >
+              <span>すべて</span>
+              <span style={{ color: "var(--muted)" }}>{totalUnread}</span>
+            </button>
+            <a
+              href="/x"
+              className="flex w-full items-center rounded px-2 py-1"
+              style={{ color: "var(--muted)" }}
+            >
+              X いいね
+            </a>
+          </>
+        )}
         {categories.map((cat) => (
           <CategoryGroup
             key={cat}
@@ -108,18 +210,43 @@ export function FeedSidebar({
             onDragStart={setDragFeedId}
             onDrop={moveFeedToCategory}
             onRename={renameCategory}
+            selectMode={selectMode}
+            selectedIds={selectedIds}
+            onToggleFeed={toggleOne}
+            onToggleCategory={toggleCategory}
           />
         ))}
       </nav>
 
       <div className="border-t p-2" style={{ borderColor: "var(--card-border)" }}>
-        <button
-          onClick={onAddFeed}
-          className="w-full rounded px-2 py-1 text-xs"
-          style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-        >
-          + フィード追加
-        </button>
+        {selectMode ? (
+          <div className="flex gap-2">
+            <button
+              onClick={exitSelectMode}
+              disabled={deleting}
+              className="flex-1 rounded px-2 py-1 text-xs disabled:opacity-50"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={deleteSelected}
+              disabled={deleting || selectedIds.size === 0}
+              className="flex-1 rounded px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+              style={{ background: "#dc2626" }}
+            >
+              {deleting ? "削除中..." : `削除 (${selectedIds.size})`}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onAddFeed}
+            className="w-full rounded px-2 py-1 text-xs"
+            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+          >
+            + フィード追加
+          </button>
+        )}
       </div>
     </aside>
   );
@@ -134,6 +261,10 @@ function CategoryGroup({
   onDragStart,
   onDrop,
   onRename,
+  selectMode,
+  selectedIds,
+  onToggleFeed,
+  onToggleCategory,
 }: {
   category: string;
   feeds: FeedWithUnread[];
@@ -143,6 +274,10 @@ function CategoryGroup({
   onDragStart: (id: string | null) => void;
   onDrop: (feedId: string, category: string) => void;
   onRename: (oldName: string, newName: string) => void;
+  selectMode: boolean;
+  selectedIds: Set<string>;
+  onToggleFeed: (id: string) => void;
+  onToggleCategory: (category: string) => void;
 }) {
   const [open, setOpen] = useState(true);
   const [dropTarget, setDropTarget] = useState(false);
@@ -157,7 +292,11 @@ function CategoryGroup({
     }
   }, [editing]);
 
+  const catAllChecked = selectMode && feeds.every((f) => selectedIds.has(f.id));
+  const catSomeChecked = selectMode && !catAllChecked && feeds.some((f) => selectedIds.has(f.id));
+
   function handleDragOver(e: React.DragEvent) {
+    if (selectMode) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDropTarget(true);
@@ -168,6 +307,7 @@ function CategoryGroup({
   }
 
   function handleDrop(e: React.DragEvent) {
+    if (selectMode) return;
     e.preventDefault();
     setDropTarget(false);
     if (dragFeedId) {
@@ -197,7 +337,18 @@ function CategoryGroup({
         outlineOffset: "-2px",
       }}
     >
-      {editing ? (
+      {selectMode ? (
+        <label className="flex cursor-pointer items-center gap-2 px-2 text-xs uppercase" style={{ color: "var(--muted)" }}>
+          <input
+            type="checkbox"
+            checked={catAllChecked}
+            ref={(el) => { if (el) el.indeterminate = catSomeChecked; }}
+            onChange={() => onToggleCategory(category)}
+            className="h-3.5 w-3.5"
+          />
+          <span>{category}</span>
+        </label>
+      ) : editing ? (
         <input
           ref={inputRef}
           value={editValue}
@@ -222,36 +373,57 @@ function CategoryGroup({
           <span>{open ? "▾" : "▸"}</span>
         </button>
       )}
-      {open && (
+      {(open || selectMode) && (
         <div className="mt-1">
-          {feeds.map((f) => (
-            <button
-              key={f.id}
-              draggable
-              onDragStart={(e) => {
-                onDragStart(f.id);
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", f.id);
-              }}
-              onDragEnd={() => onDragStart(null)}
-              onClick={() => onSelect(f.id)}
-              className="flex w-full cursor-grab items-center gap-2 rounded px-2 py-1 text-left active:cursor-grabbing"
-              style={{
-                background: selectedFeedId === f.id ? "var(--accent-subtle)" : "transparent",
-              }}
-            >
-              <FeedIcon url={f.faviconUrl} title={f.title} />
-              <span className="min-w-0 flex-1 truncate">{f.title}</span>
-              {f.consecutiveFetchFailures >= 3 && (
-                <span className="shrink-0 text-xs text-yellow-500" title="取得失敗">⚠</span>
-              )}
-              {f.unreadCount > 0 && (
-                <span className="shrink-0 text-xs" style={{ color: "var(--muted)" }}>
-                  {f.unreadCount}
-                </span>
-              )}
-            </button>
-          ))}
+          {feeds.map((f) => {
+            const checked = selectedIds.has(f.id);
+            return (
+              <button
+                key={f.id}
+                draggable={!selectMode}
+                onDragStart={(e) => {
+                  if (selectMode) return;
+                  onDragStart(f.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", f.id);
+                }}
+                onDragEnd={() => onDragStart(null)}
+                onClick={() => (selectMode ? onToggleFeed(f.id) : onSelect(f.id))}
+                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left ${
+                  selectMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"
+                }`}
+                style={{
+                  background:
+                    selectMode && checked
+                      ? "var(--accent-subtle)"
+                      : !selectMode && selectedFeedId === f.id
+                        ? "var(--accent-subtle)"
+                        : "transparent",
+                }}
+              >
+                {selectMode ? (
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggleFeed(f.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-3.5 w-3.5 shrink-0"
+                  />
+                ) : (
+                  <FeedIcon url={f.faviconUrl} title={f.title} />
+                )}
+                <span className="min-w-0 flex-1 truncate">{f.title}</span>
+                {!selectMode && f.consecutiveFetchFailures >= 3 && (
+                  <span className="shrink-0 text-xs text-yellow-500" title="取得失敗">⚠</span>
+                )}
+                {!selectMode && f.unreadCount > 0 && (
+                  <span className="shrink-0 text-xs" style={{ color: "var(--muted)" }}>
+                    {f.unreadCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
