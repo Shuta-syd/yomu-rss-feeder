@@ -40,8 +40,8 @@ export async function validateFeedUrl(url: string): Promise<ParseValidation> {
 function resolveFaviconUrl(siteUrl: string | undefined | null): string | null {
   if (!siteUrl) return null;
   try {
-    const host = new URL(siteUrl).origin;
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
+    const hostname = new URL(siteUrl).hostname;
+    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
   } catch {
     return null;
   }

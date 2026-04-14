@@ -41,11 +41,23 @@ export async function fetchFullContent(
     // 本文が短すぎる場合はパース失敗とみなす
     if (plain.length < 100) return null;
 
-    // OGP画像の抽出
+    // サムネイル抽出: OGP → 本文内最初のimg → null
     let thumbnailUrl: string | null = null;
+
+    // 1. OGP画像
     const ogImage = dom.window.document.querySelector('meta[property="og:image"]');
-    if (ogImage) {
-      thumbnailUrl = ogImage.getAttribute("content");
+    const ogUrl = ogImage?.getAttribute("content") ?? null;
+    // Cloudinary transformation URLなど巨大URLは除外（401になりがち）
+    if (ogUrl && ogUrl.length < 500 && !ogUrl.includes("/l_text:")) {
+      thumbnailUrl = ogUrl;
+    }
+
+    // 2. フォールバック: 本文内の最初のimg
+    if (!thumbnailUrl) {
+      const imgMatch = sanitized.match(/<img[^>]+src=["']([^"']+)["']/i);
+      if (imgMatch?.[1] && imgMatch[1].startsWith("http")) {
+        thumbnailUrl = imgMatch[1];
+      }
     }
 
     return { contentHtml: sanitized, contentPlain: plain, thumbnailUrl };

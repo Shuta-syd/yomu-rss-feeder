@@ -305,6 +305,8 @@ export function ArticleDetail({ article, onChange }: Props) {
               prose-li:leading-7"
             style={
               {
+                "--tw-prose-body": "var(--fg)",
+                "--tw-prose-headings": "var(--fg)",
                 "--tw-prose-links": "var(--accent)",
                 "--tw-prose-quotes": "var(--muted)",
                 "--tw-prose-quote-borders": "var(--accent)",

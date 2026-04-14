@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FeedSidebar } from "@/components/feeds/FeedSidebar";
 import { AddFeedDialog } from "@/components/feeds/AddFeedDialog";
@@ -19,6 +19,29 @@ export default function FeedsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
+  const [listWidth, setListWidth] = useState<number | null>(null);
+  const resizing = useRef(false);
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!resizing.current) return;
+      const sidebar = document.querySelector("aside");
+      const sidebarWidth = sidebar?.offsetWidth ?? 256;
+      const newWidth = e.clientX - sidebarWidth;
+      setListWidth(Math.max(240, Math.min(newWidth, 800)));
+    }
+    function onMouseUp() {
+      resizing.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
 
   const loadFeeds = useCallback(async () => {
     const res = await fetch("/api/feeds");
@@ -101,8 +124,8 @@ export default function FeedsPage() {
         onFeedMoved={loadFeeds}
       />
       <section
-        className="flex w-96 shrink-0 flex-col border-r"
-        style={{ borderColor: "var(--card-border)" }}
+        className={`flex shrink-0 flex-col ${listWidth === null ? "w-96" : ""}`}
+        style={listWidth !== null ? { width: listWidth } : undefined}
       >
         <div
           className="flex items-center gap-2 border-b p-2"
@@ -133,6 +156,16 @@ export default function FeedsPage() {
           />
         </div>
       </section>
+      {/* リサイズハンドル */}
+      <div
+        className="w-1 shrink-0 cursor-col-resize transition-colors hover:bg-[var(--accent)]"
+        style={{ background: "var(--card-border)" }}
+        onMouseDown={() => {
+          resizing.current = true;
+          document.body.style.cursor = "col-resize";
+          document.body.style.userSelect = "none";
+        }}
+      />
       <section className="flex-1 overflow-hidden">
         <ArticleDetail
           article={selected}

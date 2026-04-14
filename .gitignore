@@ -1,4 +1,5 @@
 node_modules
+.pnpm-store/
 .next
 out
 dist
@@ -11,3 +12,4 @@ coverage
 data/
 drizzle/meta/_journal.json.bak
 next-env.d.ts
+.claude/
