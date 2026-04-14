@@ -14,6 +14,8 @@ interface Props {
   onFeedMoved?: () => void;
   onFeedsDeleted?: () => void;
   isMobile?: boolean;
+  view?: "feeds" | "likes";
+  onSelectLikes?: () => void;
 }
 
 export function FeedSidebar({
@@ -27,6 +29,8 @@ export function FeedSidebar({
   onFeedMoved,
   onFeedsDeleted,
   isMobile,
+  view = "feeds",
+  onSelectLikes,
 }: Props) {
   const grouped = feeds.reduce<Record<string, FeedWithUnread[]>>((acc, f) => {
     (acc[f.category] ??= []).push(f);
@@ -189,22 +193,29 @@ export function FeedSidebar({
               onClick={() => onSelect(null)}
               className="flex w-full items-center justify-between rounded px-2 py-1"
               style={{
-                background: selectedFeedId === null ? "var(--accent-subtle)" : "transparent",
+                background:
+                  view === "feeds" && selectedFeedId === null
+                    ? "var(--accent-subtle)"
+                    : "transparent",
               }}
             >
               <span>すべて</span>
               <span style={{ color: "var(--muted)" }}>{totalUnread}</span>
             </button>
-            <a
-              href="/x"
+            <button
+              onClick={() => onSelectLikes?.()}
               className="flex w-full items-center gap-2 rounded px-2 py-1"
-              style={{ color: "var(--muted)" }}
+              style={{
+                background:
+                  view === "likes" ? "var(--accent-subtle)" : "transparent",
+                color: view === "likes" ? "inherit" : "var(--muted)",
+              }}
             >
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="currentColor" aria-hidden>
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
               </svg>
               <span>いいね</span>
-            </a>
+            </button>
           </>
         )}
         {categories.map((cat) => (

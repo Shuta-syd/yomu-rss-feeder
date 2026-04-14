@@ -7,8 +7,11 @@ import { AddFeedDialog } from "@/components/feeds/AddFeedDialog";
 import { ArticleList } from "@/components/articles/ArticleList";
 import { ArticleDetail } from "@/components/articles/ArticleDetail";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { XLikesList } from "@/components/x/XLikesList";
+import { XAnalysisPanel } from "@/components/x/XAnalysisPanel";
 import type { FeedWithUnread } from "@/types/feed";
 import type { ArticleDTO } from "@/types/article";
+import type { XLike } from "@/lib/db/schema";
 
 export default function FeedsPage() {
   const router = useRouter();
@@ -23,6 +26,12 @@ export default function FeedsPage() {
   const [aiStatus, setAiStatus] = useState<{ pending: number; processing: number; failed: number; currentTitle: string | null; currentFeedTitle: string | null } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileView, setMobileView] = useState<"sidebar" | "list" | "detail">("list");
+  const [view, setView] = useState<"feeds" | "likes">("feeds");
+  const [likes, setLikes] = useState<XLike[]>([]);
+  const [likesLoading, setLikesLoading] = useState(false);
+  const [likesFetching, setLikesFetching] = useState(false);
+  const [likesFetchResult, setLikesFetchResult] = useState<string | null>(null);
+  const [xConnected, setXConnected] = useState<boolean | null>(null);
   const [slideDirection, setSlideDirection] = useState<"forward" | "back">("forward");
 
   const viewOrder = { sidebar: 0, list: 1, detail: 2 } as const;
@@ -91,6 +100,50 @@ export default function FeedsPage() {
   useEffect(() => {
     loadArticles();
   }, [loadArticles]);
+
+  const loadLikes = useCallback(async () => {
+    setLikesLoading(true);
+    const res = await fetch("/api/x/likes?limit=100");
+    if (res.status === 401) {
+      router.replace("/login");
+      return;
+    }
+    if (res.ok) {
+      const data = await res.json();
+      setLikes(data.likes);
+    }
+    setLikesLoading(false);
+  }, [router]);
+
+  useEffect(() => {
+    if (view !== "likes") return;
+    if (xConnected === null) {
+      fetch("/api/x/status")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => setXConnected(d ? !!d.connected : false));
+    }
+    loadLikes();
+  }, [view, xConnected, loadLikes]);
+
+  async function fetchLikes() {
+    setLikesFetching(true);
+    setLikesFetchResult(null);
+    try {
+      const res = await fetch("/api/x/likes", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setLikesFetchResult(`${data.fetched}件取得`);
+        loadLikes();
+      } else {
+        const data = await res.json();
+        setLikesFetchResult(`エラー: ${data.error}`);
+      }
+    } catch {
+      setLikesFetchResult("取得失敗");
+    } finally {
+      setLikesFetching(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -164,6 +217,7 @@ export default function FeedsPage() {
           feeds={feeds}
           selectedFeedId={selectedFeedId}
           onSelect={(id) => {
+            setView("feeds");
             setSelectedFeedId(id);
             setSelected(null);
             if (isMobile) goToMobileView("list");
@@ -180,6 +234,12 @@ export default function FeedsPage() {
             setSelectedFeedId(null);
           }}
           isMobile={isMobile}
+          view={view}
+          onSelectLikes={() => {
+            setView("likes");
+            setSelected(null);
+            if (isMobile) goToMobileView("list");
+          }}
         />
       </div>
       <section
@@ -201,14 +261,33 @@ export default function FeedsPage() {
               ☰
             </button>
           )}
-          <input
-            type="search"
-            placeholder="検索..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 rounded px-2 py-1 text-sm"
-            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-          />
+          {view === "feeds" ? (
+            <input
+              type="search"
+              placeholder="検索..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1 rounded px-2 py-1 text-sm"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+            />
+          ) : (
+            <>
+              <span className="flex-1 text-sm font-semibold">X いいね</span>
+              {likesFetchResult && (
+                <span className="text-xs" style={{ color: "var(--muted)" }}>
+                  {likesFetchResult}
+                </span>
+              )}
+              <button
+                onClick={fetchLikes}
+                disabled={likesFetching || xConnected === false}
+                className="rounded px-2 py-1 text-xs disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "white" }}
+              >
+                {likesFetching ? "取得中..." : "いいね取得"}
+              </button>
+            </>
+          )}
           <ThemeToggle />
           <a
             href="/settings"
@@ -232,11 +311,28 @@ export default function FeedsPage() {
           </div>
         )}
         <div className="flex-1 overflow-hidden">
-          <ArticleList
-            articles={articles}
-            selectedId={selected?.id ?? null}
-            onSelect={handleSelect}
-          />
+          {view === "feeds" ? (
+            <ArticleList
+              articles={articles}
+              selectedId={selected?.id ?? null}
+              onSelect={handleSelect}
+            />
+          ) : xConnected === false ? (
+            <div className="flex h-full flex-col items-center justify-center p-6 text-center text-sm" style={{ color: "var(--muted)" }}>
+              <p className="mb-3">X未連携です</p>
+              <a
+                href="/settings"
+                className="rounded px-3 py-1.5 text-xs"
+                style={{ background: "var(--accent)", color: "white" }}
+              >
+                設定画面へ
+              </a>
+            </div>
+          ) : (
+            <div className="h-full overflow-y-auto p-3">
+              <XLikesList likes={likes} loading={likesLoading} />
+            </div>
+          )}
         </div>
       </section>
       {/* リサイズハンドル (desktop only) */}
@@ -271,13 +367,27 @@ export default function FeedsPage() {
           </div>
         )}
         <div className="flex-1 overflow-hidden">
-          <ArticleDetail
-            article={selected}
-            onChange={(a) => {
-              setSelected(a);
-              setArticles((prev) => prev.map((x) => (x.id === a.id ? a : x)));
-            }}
-          />
+          {view === "feeds" ? (
+            <ArticleDetail
+              article={selected}
+              onChange={(a) => {
+                setSelected(a);
+                setArticles((prev) => prev.map((x) => (x.id === a.id ? a : x)));
+              }}
+            />
+          ) : (
+            <div className="flex h-full flex-col">
+              <div
+                className="border-b p-3"
+                style={{ borderColor: "var(--card-border)" }}
+              >
+                <h2 className="text-sm font-semibold">AI分析</h2>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3">
+                <XAnalysisPanel />
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
