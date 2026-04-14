@@ -48,6 +48,35 @@ function repair(raw: string): string {
     .trim();
 }
 
+/**
+ * 切り詰められた/破損したJSONを修復する試み:
+ * - 未閉じの文字列を閉じる
+ * - 未閉じのオブジェクト/配列を閉じる
+ */
+function repairTruncated(raw: string): string {
+  let s = repair(raw);
+  // 未閉じクォートを検出 (偶数個でなければ閉じる)
+  let inString = false;
+  let escape = false;
+  const stack: string[] = [];
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escape) { escape = false; continue; }
+    if (c === "\\") { escape = true; continue; }
+    if (c === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (c === "{" || c === "[") stack.push(c === "{" ? "}" : "]");
+    else if (c === "}" || c === "]") stack.pop();
+  }
+  // 未閉じ文字列を閉じる
+  if (inString) s += '"';
+  // 末尾の余分なカンマを削除
+  s = s.replace(/,\s*$/, "");
+  // 未閉じのブラケットを閉じる
+  while (stack.length > 0) s += stack.pop();
+  return s;
+}
+
 export function parseAndValidate<T>(raw: string, schema: z.ZodSchema<T>): T {
   let parsed: unknown;
   try {
@@ -55,8 +84,12 @@ export function parseAndValidate<T>(raw: string, schema: z.ZodSchema<T>): T {
   } catch {
     try {
       parsed = JSON.parse(repair(raw));
-    } catch (e) {
-      throw new JsonParseError(raw, e);
+    } catch {
+      try {
+        parsed = JSON.parse(repairTruncated(raw));
+      } catch (e) {
+        throw new JsonParseError(raw, e);
+      }
     }
   }
   const result = schema.safeParse(parsed);

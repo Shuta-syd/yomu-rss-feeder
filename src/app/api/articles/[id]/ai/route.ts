@@ -8,6 +8,7 @@ import { createProvider, LLMNoApiKeyError } from "@/lib/llm/provider";
 import { STAGE2_SYSTEM, stage2UserPrompt } from "@/lib/llm/prompts";
 import { parseAndValidate, stage2Schema } from "@/lib/llm/parse-response";
 import { sanitizeHtml } from "@/lib/sanitize";
+import { marked } from "marked";
 
 export async function POST(
   _req: NextRequest,
@@ -55,7 +56,7 @@ export async function POST(
           const gen = provider.chatStream({
             systemPrompt: STAGE2_SYSTEM,
             userPrompt: stage2UserPrompt(article.title, article.contentPlain!, article.contentHtml),
-            maxOutputTokens: 8192,
+            maxOutputTokens: 32768,
           });
 
           for await (const chunk of gen) {
@@ -65,9 +66,9 @@ export async function POST(
 
           const parsed = parseAndValidate(fullContent, stage2Schema);
 
-          // 翻訳はHTMLで返される想定なのでサニタイズする
+          // 翻訳はMarkdownで返されるのでHTML変換してサニタイズ
           const translationHtml = parsed.translation
-            ? sanitizeHtml(parsed.translation)
+            ? sanitizeHtml(await marked.parse(parsed.translation))
             : null;
 
           db.update(articles)
