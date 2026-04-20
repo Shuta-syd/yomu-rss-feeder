@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { articles } from "../db/schema";
 import { getSettings } from "../settings";
@@ -29,7 +29,7 @@ export async function processStage1ForArticles(articleIds: string[]): Promise<vo
   const rows = db
     .select()
     .from(articles)
-    .where(inArray(articles.id, articleIds))
+    .where(and(inArray(articles.id, articleIds), eq(articles.aiStage1Status, "pending")))
     .all();
 
   const start = Date.now();

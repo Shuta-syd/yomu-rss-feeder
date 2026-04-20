@@ -170,7 +170,7 @@ export async function fetchFeed(feedId: string, url: string): Promise<FetchResul
       .onConflictDoNothing({ target: [articles.feedId, articles.dedupHash] })
       .run();
 
-    if (result.changes > 0) newIds.push(id);
+    if (result.changes > 0 && aiEnabled) newIds.push(id);
   }
 
   const siteUrl = parsed.link?.trim() || null;
