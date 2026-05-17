@@ -5,6 +5,7 @@ export type ArticleWithFeed = Article & { feedTitle: string | null };
 
 export interface ArticleListParams {
   feedId?: string;
+  category?: string;
   isRead?: boolean;
   isStarred?: boolean;
   search?: string;
@@ -78,6 +79,9 @@ export function listArticles(params: ArticleListParams): ArticleListResult {
   if (params.feedId) {
     where.push("a.feed_id = ?");
     values.push(params.feedId);
+  } else if (params.category) {
+    where.push("a.feed_id IN (SELECT id FROM feeds WHERE category = ?)");
+    values.push(params.category);
   }
   if (params.isRead !== undefined) {
     where.push("a.is_read = ?");
