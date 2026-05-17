@@ -104,80 +104,145 @@ debounce 500ms の自動保存。textarea onChange でローカル state を更�
 
 ##### 競合・記事切替の取り扱い (Codex レビュー反映)
 
-3 つの落とし穴を踏まないよう、以下のロジックを採用する。
+クライアント側の AbortController は **サーバ到達後の PATCH をキャンセルできない**ため、それ単体では「最後の編集が勝つ」を保証できない。代わりに**1 記事につき同時 1 PATCH まで**にシリアライズし、その間に新たな編集が来ても in-flight の完了を待ってから次の PATCH を投げる、というロジックを採用する。これによりサーバ到達順序 = クライアント発火順序となり、last-write-wins が成立する。
 
-**(a) 記事切替時に下書きをロスせず flush する**
+**(a) 記事切替時の state 完全リセット**
 
-`ArticleDetail` は親 (`FeedsPage`) が同じインスタンスのまま `article` prop を差し替えるため、`useState(article.note ?? "")` の初期化が走り直さない。これを `article.id` を key にした再マウント（`<ArticleDetail key={article.id} ... />` 親側で指定）で解決する。再マウントすることで note 編集中の state は完全に新規になる。
+`<ArticleDetail key={selected?.id ?? "empty"} ... />` を親側で指定し、`article.id` が変わるたびに ArticleDetail を unmount → mount させて state を完全に新規化する。`selected` が `null` の時は `"empty"` を使って null セーフに。
 
-ただし「再マウント = unmount → mount」で**前の記事の編集中下書きが破棄される**ので、unmount 時に保留中の debounce が残っていれば**同期的に flush** する必要がある:
+**(b) モジュールスコープの per-article 保存キュー**
+
+コンポーネント instance 内に state を持つと、unmount → remount で別の instance が同じ article id に対して別キューを持ってしまい、in-flight 同士が衝突する (Codex 指摘)。これを根本解決するため、**保存ロジックを React の外、モジュールスコープに切り出す**。`articleId → 保存キュー` のマップを持ち、同じ articleId への保存は必ず同じキューでシリアル処理される。
+
+新規ファイル `src/lib/article-note-saver.ts`:
+
+```ts
+import type { ArticleDTO } from "@/types/article";
+
+type Status = "idle" | "saving" | "saved";
+type StatusListener = (s: Status) => void;
+type UpdateListener = (a: ArticleDTO) => void;
+
+interface Queue {
+  desired: string;           // ユーザ入力の最新値
+  lastSent: string;          // 最後に送信成功した値
+  inflight: Promise<void>;   // シリアル化のための尾
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+  status: Status;
+  statusListeners: Set<StatusListener>;
+}
+
+const DEBOUNCE_MS = 500;
+const queues = new Map<string, Queue>();
+const updateListeners = new Set<UpdateListener>();
+
+function getQueue(id: string, initial: string): Queue {
+  let q = queues.get(id);
+  if (!q) {
+    q = {
+      desired: initial,
+      lastSent: initial,
+      inflight: Promise.resolve(),
+      debounceTimer: null,
+      status: "idle",
+      statusListeners: new Set(),
+    };
+    queues.set(id, q);
+  }
+  return q;
+}
+
+function setStatus(q: Queue, s: Status) {
+  q.status = s;
+  for (const l of q.statusListeners) l(s);
+}
+
+export function scheduleNoteSave(articleId: string, value: string, initial: string) {
+  const q = getQueue(articleId, initial);
+  q.desired = value;
+  if (q.debounceTimer) clearTimeout(q.debounceTimer);
+  setStatus(q, "saving"); // ユーザの目には「typing → 保存待ち」
+  q.debounceTimer = setTimeout(() => {
+    q.debounceTimer = null;
+    q.inflight = q.inflight.then(() => drain(articleId, q));
+  }, DEBOUNCE_MS);
+}
+
+async function drain(id: string, q: Queue) {
+  while (q.desired !== q.lastSent) {
+    const value = q.desired;
+    try {
+      const res = await fetch(`/api/articles/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: value.trim() || null }),
+      });
+      if (!res.ok) {
+        setStatus(q, "idle");
+        return;
+      }
+      const updated = (await res.json()) as ArticleDTO;
+      q.lastSent = value;
+      for (const l of updateListeners) l(updated);
+    } catch {
+      setStatus(q, "idle");
+      return;
+    }
+  }
+  setStatus(q, "saved");
+}
+
+export function subscribeStatus(articleId: string, initial: string, listener: StatusListener): () => void {
+  const q = getQueue(articleId, initial);
+  q.statusListeners.add(listener);
+  listener(q.status); // 初期通知
+  return () => q.statusListeners.delete(listener);
+}
+
+export function subscribeUpdates(listener: UpdateListener): () => void {
+  updateListeners.add(listener);
+  return () => updateListeners.delete(listener);
+}
+```
+
+ArticleDetail はキューに `scheduleNoteSave` を投げ、ステータスを subscribe するだけ:
 
 ```tsx
-// In ArticleDetail
-const pendingArticleIdRef = useRef(article.id);
-const pendingNoteRef = useRef<string | null>(null);
+const [note, setNote] = useState(article.note ?? "");
+const [status, setStatus] = useState<Status>("idle");
 
 useEffect(() => {
-  pendingArticleIdRef.current = article.id;
-}, [article.id]);
+  return subscribeStatus(article.id, article.note ?? "", setStatus);
+}, [article.id, article.note]);
 
+function handleChange(v: string) {
+  setNote(v);
+  scheduleNoteSave(article.id, v, article.note ?? "");
+}
+```
+
+親 (page.tsx) でグローバル update リスナーを 1 回だけ登録し、`onChange` 同等の id ガード処理を行う:
+
+```tsx
 useEffect(() => {
-  // unmount cleanup: flush pending edit synchronously via sendBeacon or keepalive fetch
-  return () => {
-    const pending = pendingNoteRef.current;
-    const id = pendingArticleIdRef.current;
-    if (pending === null) return;
-    // fire-and-forget but flagged to keep alive past unmount
-    fetch(`/api/articles/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: pending.trim() || null }),
-      keepalive: true,
-    }).catch(() => {});
-  };
+  return subscribeUpdates((updated) => {
+    setSelected((cur) => (cur?.id === updated.id ? updated : cur));
+    setArticles((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+  });
 }, []);
 ```
 
-`pendingNoteRef` は debounce タイマーが現在保留している note 内容。タイマー発火時または cleanup 時に null にする。
+**Codex blocker への対応の正しさ:**
 
-**(b) 並行 PATCH レースの防止**
+- **#1 (cross-remount で in-flight 重複)**: 解決。キューは `articleId` をキーにモジュールスコープで保持されるので、`<ArticleDetail>` が unmount → remount しても同じキューを使う。`q.inflight = q.inflight.then(drain)` で必ずシリアル実行され、同一 article に対して同時 PATCH は起きない。
+- **#2 (`stoppedRef` が `await res.json()` 後にチェックされない)**: 解決。コンポーネントは保存ロジックを持たないので unmount による中断という概念がない。update リスナーは親に 1 つだけ存在し、id ガード付きなので unmount 中の articleに対するレスポンスが届いても無視される（記事リスト側の更新は問題ない、常にいま該当 id の行を更新するだけ）。
+- **#3 (keepalive と in-flight の併存)**: 解決。**keepalive を一切使わない**。タブを閉じる際の保存はブラウザ依存だが、これは元から仕様外。debounce 中（500ms 以内）に切り替え/閉じる場合のみ最新値が失われる。
 
-debounce が短時間に複数回成立すると、最後の PATCH が最初に完了して上書きされる可能性がある。`AbortController` で**前回の PATCH を必ずキャンセル**してから新規 PATCH を投げる:
+**トレードオフ**: debounce 500ms 中に記事切替やタブクローズが起きると、その間の最新入力は保存されない。実用上 500ms 待てば問題ない。完全保証が必要なら将来 `If-Match` ヘッダによる楽観ロックや手動「保存」ボタンを追加する（今回はスコープ外）。
 
-```tsx
-const abortRef = useRef<AbortController | null>(null);
+**(d) 親の `onChange` を id ガード付きに**
 
-const flushSave = useCallback(async (id: string, value: string | null) => {
-  abortRef.current?.abort();
-  const ctrl = new AbortController();
-  abortRef.current = ctrl;
-  setSavingState("saving");
-  try {
-    const res = await fetch(`/api/articles/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: value }),
-      signal: ctrl.signal,
-    });
-    if (ctrl.signal.aborted) return;
-    if (res.ok) {
-      const updated = await res.json();
-      lastSavedRef.current = updated.note ?? "";
-      pendingNoteRef.current = null;
-      setSavingState("saved");
-      onChange?.(updated);
-    } else {
-      setSavingState("idle");
-    }
-  } catch (e) {
-    if ((e as Error).name !== "AbortError") setSavingState("idle");
-  }
-}, [onChange]);
-```
-
-**(c) 親の `onChange` で違う記事を上書きしない**
-
-PATCH が遅延して別記事に切り替わった後に解決する場合、親側が `setSelected(updated)` を無条件に呼ぶと表示中の別記事が前の記事に切り替わってしまう。親 ([src/app/feeds/page.tsx:490](../../../src/app/feeds/page.tsx#L490)) の `onChange` ハンドラを以下に変更:
+PATCH が遅延して別記事に切替後に解決した場合、親が `setSelected(updated)` を無条件に呼ぶと表示中記事が前のに戻る。親 ([src/app/feeds/page.tsx:490](../../../src/app/feeds/page.tsx#L490)) の `onChange` を以下に変更:
 
 ```ts
 onChange={(a) => {
@@ -186,7 +251,7 @@ onChange={(a) => {
 }}
 ```
 
-これで `setSelected` は現在表示中の記事と同一 ID のときだけ反映し、リストは id 基準で独立に更新される。**この変更は既存の isRead/isStarred 更新フローにも安全（むしろより堅牢）**。
+これで `setSelected` は現在表示中記事と同一 ID のときだけ反映、リストは id 基準で独立更新される。既存の isRead/isStarred 更新にも適用されるが、より堅牢になるだけで挙動は変わらない。
 
 #### 開閉状態の永続化
 
@@ -228,6 +293,12 @@ onChange={(a) => {
   - 前後空白のみも `null`
   - 通常テキストはそのまま
   - 既存の `isRead` / `isStarred` 更新と共存（同時送信できる）
+  - PATCH 後のレスポンスに `feedTitle` が含まれる（既存バグの修正検証）
+- 保存キュー (`article-note-saver.ts`) の単体テスト: `fetch` をモック
+  - 連続 3 回 `scheduleNoteSave` を呼ぶと debounce 後に最新値だけ 1 回 PATCH される
+  - PATCH 中に新規 `scheduleNoteSave` が来たら次の iteration で 1 回追加 PATCH される
+  - 失敗時に status が `idle` に戻る
+  - 同じ articleId で異なる instance のリクエストが衝突しない（cross-remount シミュレーション）
 - UI レベル: 手動で確認
   - メモを書いて 500ms 待つと保存表示が出る
   - リロード後もメモが残っている
@@ -243,8 +314,10 @@ onChange={(a) => {
 | `src/lib/articles-query.ts` | `rowToArticle` で `note` 読み出し |
 | `src/types/article.ts` | `ArticleDTO.note: string \| null` 追加 |
 | `src/app/api/articles/[id]/route.ts` | `patchSchema` に `note` 追加 + trim 正規化 |
-| `src/components/articles/ArticleDetail.tsx` | メモ折りたたみ UI + debounce 保存 + AbortController + unmount flush |
-| `src/app/feeds/page.tsx` | `<ArticleDetail key={selected.id}>` で記事切替時に再マウント、`onChange` を id 比較ガード付きに変更 |
+| `src/components/articles/ArticleDetail.tsx` | メモ折りたたみ UI + saver 呼び出し + status subscribe |
+| `src/lib/article-note-saver.ts` (新規) | モジュールスコープの per-article 保存キュー (debounce / serialize / status pub-sub) |
+| `__tests__/lib/article-note-saver.test.ts` (新規) | saver の単体テスト |
+| `src/app/feeds/page.tsx` | `<ArticleDetail key={selected?.id ?? "empty"}>` で記事切替時に再マウント、`subscribeUpdates` で id ガード付き反映 |
 | `src/lib/articles-query.ts` | `rowToArticle` を export (PATCH ハンドラから再利用するため) |
 | `src/components/articles/ArticleList.tsx` | 📝 インジケータ表示 |
 | `__tests__/lib/article-note.test.ts` (新規) | API 正規化ロジックのテスト |
