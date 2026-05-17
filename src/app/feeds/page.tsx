@@ -18,6 +18,7 @@ export default function FeedsPage() {
   const [feeds, setFeeds] = useState<FeedWithUnread[]>([]);
   const [articles, setArticles] = useState<ArticleDTO[]>([]);
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<ArticleDTO | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -84,6 +85,7 @@ export default function FeedsPage() {
   const loadArticles = useCallback(async () => {
     const params = new URLSearchParams();
     if (selectedFeedId) params.set("feedId", selectedFeedId);
+    else if (selectedCategory) params.set("category", selectedCategory);
     if (search) params.set("search", search);
     if (view === "starred") params.set("isStarred", "true");
     const res = await fetch(`/api/articles?${params}`);
@@ -93,11 +95,17 @@ export default function FeedsPage() {
     }
     const data = await res.json();
     setArticles(data.articles);
-  }, [selectedFeedId, search, view, router]);
+  }, [selectedFeedId, selectedCategory, search, view, router]);
 
   useEffect(() => {
     loadFeeds();
   }, [loadFeeds]);
+
+  useEffect(() => {
+    if (selectedCategory === null) return;
+    const exists = feeds.some((f) => f.category === selectedCategory);
+    if (!exists) setSelectedCategory(null);
+  }, [feeds, selectedCategory]);
 
   useEffect(() => {
     loadArticles();
@@ -173,6 +181,7 @@ export default function FeedsPage() {
     setMarkingRead(true);
     const body: Record<string, string> = {};
     if (selectedFeedId) body.feedId = selectedFeedId;
+    else if (selectedCategory) body.category = selectedCategory;
     const res = await fetch("/api/articles/mark-all-read", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -234,9 +243,18 @@ export default function FeedsPage() {
         <FeedSidebar
           feeds={feeds}
           selectedFeedId={selectedFeedId}
+          selectedCategory={selectedCategory}
           onSelect={(id) => {
             setView("feeds");
             setSelectedFeedId(id);
+            setSelectedCategory(null);
+            setSelected(null);
+            if (isMobile) goToMobileView("list");
+          }}
+          onSelectCategory={(category) => {
+            setView("feeds");
+            setSelectedFeedId(null);
+            setSelectedCategory(category);
             setSelected(null);
             if (isMobile) goToMobileView("list");
           }}
@@ -250,17 +268,24 @@ export default function FeedsPage() {
             loadArticles();
             setSelected(null);
             setSelectedFeedId(null);
+            setSelectedCategory(null);
+          }}
+          onCategoryRenamed={(oldName, newName) => {
+            setSelectedCategory((cur) => (cur === oldName ? newName : cur));
           }}
           isMobile={isMobile}
           view={view}
           onSelectLikes={() => {
             setView("likes");
+            setSelectedFeedId(null);
+            setSelectedCategory(null);
             setSelected(null);
             if (isMobile) goToMobileView("list");
           }}
           onSelectStarred={() => {
             setView("starred");
             setSelectedFeedId(null);
+            setSelectedCategory(null);
             setSelected(null);
             if (isMobile) goToMobileView("list");
           }}
