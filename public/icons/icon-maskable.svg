@@ -8,8 +8,10 @@
     </radialGradient>
     <mask id="yCut">
       <rect width="64" height="64" fill="white"/>
-      <path d="M19.2 14.08 L32 32 L44.8 14.08 L39.68 14.08 L32 24.96 L24.32 14.08 Z M29.44 33.28 L34.56 33.28 L34.56 51.2 L29.44 51.2 Z" fill="black"/>
+      <!-- Y scaled by ~0.71 (20/28) and recentered to (32,32). Original V tips at top y=14, now y=18.5 -->
+      <path d="M22.86 18.51 L32 31.31 L41.14 18.51 L37.49 18.51 L32 26.27 L26.51 18.51 Z M30.18 32.23 L33.82 32.23 L33.82 44.97 L30.18 44.97 Z" fill="black"/>
     </mask>
   </defs>
-  <circle cx="32" cy="32" r="28" fill="url(#orb)" mask="url(#yCut)"/>
+  <rect width="64" height="64" fill="#050507"/>
+  <circle cx="32" cy="32" r="20" fill="url(#orb)" mask="url(#yCut)"/>
 </svg>

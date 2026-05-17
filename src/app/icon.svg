@@ -1,15 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#111827"/>
-      <stop offset="100%" stop-color="#0b0b10"/>
-    </linearGradient>
-    <linearGradient id="teal" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#5eead4"/>
-      <stop offset="100%" stop-color="#14b8a6"/>
-    </linearGradient>
+    <radialGradient id="orb" cx="0.32" cy="0.28" r="0.95">
+      <stop offset="0%" stop-color="#fb7185"/>
+      <stop offset="40%" stop-color="#a855f7"/>
+      <stop offset="85%" stop-color="#1e3a8a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </radialGradient>
+    <mask id="yCut">
+      <rect width="64" height="64" fill="white"/>
+      <path d="M19.2 14.08 L32 32 L44.8 14.08 L39.68 14.08 L32 24.96 L24.32 14.08 Z M29.44 33.28 L34.56 33.28 L34.56 51.2 L29.44 51.2 Z" fill="black"/>
+    </mask>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <text x="256" y="360" font-family="'Hiragino Sans','Noto Sans CJK JP','Yu Gothic',sans-serif" font-size="320" font-weight="900" fill="url(#teal)" text-anchor="middle">読</text>
-  <circle cx="408" cy="128" r="28" fill="#2dd4bf"/>
+  <circle cx="32" cy="32" r="28" fill="url(#orb)" mask="url(#yCut)"/>
 </svg>

@@ -11,12 +11,15 @@ export const metadata: Metadata = {
     title: "Yomu",
   },
   icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
     apple: "/icons/icon-192.png",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#2dd4bf",
+  themeColor: "#a855f7",
 };
 
 export default function RootLayout({
