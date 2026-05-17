@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { FeedIcon } from "@/components/feeds/FeedIcon";
 
 type ProviderType = "gemini" | "openai" | "anthropic";
 type TabKey = "ai" | "feeds" | "notification" | "integration" | "account";
@@ -66,6 +67,7 @@ interface FeedForSettings {
   title: string;
   category: string;
   aiEnabled: boolean;
+  faviconUrl: string | null;
 }
 
 interface ToastProps {
@@ -126,6 +128,7 @@ export default function SettingsPage() {
         title: f.title,
         category: f.category,
         aiEnabled: Boolean(f.aiEnabled),
+        faviconUrl: f.faviconUrl ?? null,
       })),
     );
   };
@@ -601,6 +604,7 @@ export default function SettingsPage() {
                             onChange={(e) => toggleFeedAi(f.id, e.target.checked)}
                             className="h-4 w-4"
                           />
+                          <FeedIcon url={f.faviconUrl} title={f.title} size="md" />
                           <span className="min-w-0 flex-1 truncate">{f.title}</span>
                           <span className="shrink-0 text-xs" style={{ color: "var(--muted)" }}>
                             {f.category}

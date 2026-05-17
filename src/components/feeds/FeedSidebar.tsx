@@ -1,7 +1,8 @@
 "use client";
 
 import type { FeedWithUnread } from "@/types/feed";
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { FeedIcon } from "./FeedIcon";
 
 interface Props {
   feeds: FeedWithUnread[];
@@ -507,29 +508,3 @@ function CategoryGroup({
   );
 }
 
-function FeedIcon({ url, title }: { url: string | null; title: string }) {
-  const [failed, setFailed] = useState(false);
-  const onError = useCallback(() => setFailed(true), []);
-
-  if (!url || failed) {
-    return (
-      <span
-        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-[10px] font-bold"
-        style={{ background: "var(--card-border)", color: "var(--muted)" }}
-      >
-        {title.charAt(0).toUpperCase()}
-      </span>
-    );
-  }
-
-  return (
-    <img
-      src={url}
-      alt=""
-      className="h-4 w-4 shrink-0 rounded-sm"
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={onError}
-    />
-  );
-}
