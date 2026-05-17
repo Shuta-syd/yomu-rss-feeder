@@ -11,26 +11,28 @@ ENV NODE_ENV=production
 
 # better-sqlite3 のランタイム依存 (libstdc++ は bookworm-slim に同梱)
 # tini は PID 1 シグナル処理用
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    tini \
-  && rm -rf /var/lib/apt/lists/*
+# BuildKit cache mount で apt パッケージを永続キャッシュ (rm -rf /var/lib/apt/lists/* は不要)
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        tini
 
 RUN corepack enable
 
 WORKDIR /app
 
 # ==============================================================================
-# deps: 本番依存のみを native build 含めて解決
+# deps: 本番依存のみを prebuilt better-sqlite3 で解決
 # ==============================================================================
 FROM base AS deps
 
-# better-sqlite3 を Linux バイナリでビルドするためのツールチェイン
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-  && rm -rf /var/lib/apt/lists/*
+# better-sqlite3 は prebuild-install で linux-x64-glibc / Node 22 ABI の prebuild を取得する
+# 万一 prebuild が無くてビルドにフォールバックする場合は npm_config_build_from_source=false が
+# 即座にエラーにしてくれる (デバッグしやすくする)
+ENV npm_config_build_from_source=false
 
 COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
@@ -41,11 +43,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 # ==============================================================================
 FROM base AS builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-  && rm -rf /var/lib/apt/lists/*
+ENV npm_config_build_from_source=false
 
 # NODE_ENV=production のまま devDependencies も入れる (--prod=false)
 # next build は NODE_ENV=production で実行される必要がある
@@ -57,7 +55,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm build && pnpm build:scripts
+# Next.js のビルドキャッシュをマウントして 2 回目以降のビルドを高速化
+RUN --mount=type=cache,id=next-build,target=/app/.next/cache \
+    pnpm build && pnpm build:scripts
 
 # ==============================================================================
 # runner: 本番イメージ (Proxmox デプロイ対象)
