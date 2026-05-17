@@ -390,33 +390,35 @@ export default function SettingsPage() {
     }
   }
 
-  const inputStyle = { borderColor: "var(--card-border)", background: "var(--card)" };
-  const inputCls = "w-full rounded border px-3 py-2";
+  const inputStyle = { borderColor: "var(--card-border)", background: "var(--bg)" };
+  const inputCls = "w-full rounded-md border px-3 py-2 text-sm";
   const labelCls = "mb-1.5 block text-sm font-medium";
   const sectionTitleCls = "text-base font-semibold";
-  const primaryBtnCls = "rounded px-4 py-2 text-sm font-medium disabled:opacity-50";
+  const primaryBtnCls = "rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 transition-opacity";
   const primaryBtnStyle = { background: "var(--accent)", color: "var(--accent-fg)" };
+  const cardCls = "rounded-lg border p-5 space-y-4";
+  const cardStyle = { borderColor: "var(--card-border)", background: "var(--card)" };
 
   return (
-    <main className="mx-auto max-w-2xl p-6">
+    <main className="mx-auto max-w-3xl px-4 py-6 md:px-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">設定</h1>
         <div className="flex gap-2">
           <ThemeToggle />
           <a
             href="/feeds"
-            className="rounded px-2 py-1 text-xs"
+            className="shrink-0 rounded-md px-3 py-1.5 text-sm"
             style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
           >
-            戻る
+            ← 戻る
           </a>
         </div>
       </div>
 
-      {/* タブバー (モバイルは横スクロール、折り返さない) */}
+      {/* タブバー: ピル形状 (モバイルは横スクロール) */}
       <div
-        className="-mx-4 flex gap-1 overflow-x-auto border-b px-4 md:mx-0 md:px-0"
-        style={{ borderColor: "var(--card-border)", scrollbarWidth: "none" }}
+        className="-mx-4 mb-6 flex gap-1 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0"
+        style={{ scrollbarWidth: "none" }}
         role="tablist"
       >
         {TABS.map((t) => {
@@ -427,11 +429,9 @@ export default function SettingsPage() {
               role="tab"
               aria-selected={active}
               onClick={() => setActiveTab(t.key)}
-              className={`shrink-0 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                active ? "" : "border-transparent"
-              }`}
+              className="shrink-0 whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors"
               style={{
-                borderColor: active ? "var(--accent)" : "transparent",
+                background: active ? "var(--accent-subtle)" : "transparent",
                 color: active ? "var(--accent)" : "var(--muted)",
               }}
             >
@@ -443,8 +443,8 @@ export default function SettingsPage() {
 
       {/* AIタブ */}
       {activeTab === "ai" && (
-        <section className="mt-6 space-y-4">
-          <div className="space-y-3">
+        <section className="space-y-4">
+          <div className={cardCls} style={cardStyle}>
             <h2 className={sectionTitleCls}>API Keys</h2>
             <div>
               <label className={labelCls}>Gemini API Key</label>
@@ -481,13 +481,11 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="space-y-3">
-            <h2 className={sectionTitleCls}>要約モデル</h2>
+          <div className={cardCls} style={cardStyle}>
+            <h2 className={sectionTitleCls}>使用モデル</h2>
 
             <div>
-              <div className="mb-1.5 text-sm font-medium" style={{ color: "var(--muted)" }}>
-                自動要約
-              </div>
+              <label className={labelCls}>自動要約 (Stage 1)</label>
               <select
                 value={settings.geminiModelStage1}
                 onChange={(e) => {
@@ -509,9 +507,7 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <div className="mb-1.5 text-sm font-medium" style={{ color: "var(--muted)" }}>
-                詳細分析
-              </div>
+              <label className={labelCls}>詳細分析 (Stage 2)</label>
               <select
                 value={settings.geminiModelStage2}
                 onChange={(e) => {
@@ -533,7 +529,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div>
+          <div className="flex justify-end">
             <button
               onClick={saveAI}
               disabled={saving}
@@ -548,39 +544,41 @@ export default function SettingsPage() {
 
       {/* フィードタブ: AI対象の除外設定 */}
       {activeTab === "feeds" && (
-        <section className="mt-6 space-y-4">
-          <div className="space-y-3">
-            <h2 className={sectionTitleCls}>AI自動翻訳の対象</h2>
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
-              OFF にするとこのフィードの新着記事は Stage1 の自動翻訳・要約・タグ付けの対象外になります。既存の pending 記事も skipped に変換されます。
-            </p>
+        <section className="space-y-4">
+          <div className={cardCls} style={cardStyle}>
+            <div>
+              <h2 className={sectionTitleCls}>AI自動翻訳の対象</h2>
+              <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+                OFF にすると新着記事は Stage1 の自動翻訳・要約・タグ付けの対象外になります。既存の pending 記事も skipped に変換されます。
+              </p>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="search"
                 placeholder="フィード名・カテゴリで絞り込み"
                 value={feedFilter}
                 onChange={(e) => setFeedFilter(e.target.value)}
-                className={`${inputCls} max-w-sm`}
+                className={`${inputCls} max-w-sm flex-1`}
                 style={inputStyle}
               />
               <button
                 onClick={() => bulkToggleAi(true)}
-                className="rounded px-3 py-1.5 text-xs"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                className="shrink-0 rounded-md px-3 py-1.5 text-xs"
+                style={{ background: "var(--bg)", border: "1px solid var(--card-border)" }}
               >
                 一括ON
               </button>
               <button
                 onClick={() => bulkToggleAi(false)}
-                className="rounded px-3 py-1.5 text-xs"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                className="shrink-0 rounded-md px-3 py-1.5 text-xs"
+                style={{ background: "var(--bg)", border: "1px solid var(--card-border)" }}
               >
                 一括OFF
               </button>
             </div>
             <div
-              className="max-h-[70vh] overflow-y-auto rounded border"
-              style={{ borderColor: "var(--card-border)" }}
+              className="max-h-[60vh] overflow-y-auto rounded-md border"
+              style={{ borderColor: "var(--card-border)", background: "var(--bg)" }}
             >
               {feedList.length === 0 ? (
                 <div className="p-3 text-sm" style={{ color: "var(--muted)" }}>読み込み中...</div>
@@ -619,8 +617,8 @@ export default function SettingsPage() {
 
       {/* 通知タブ */}
       {activeTab === "notification" && (
-        <section className="mt-6 space-y-4">
-          <div className="space-y-3">
+        <section className="space-y-4">
+          <div className={cardCls} style={cardStyle}>
             <h2 className={sectionTitleCls}>プッシュ通知</h2>
             {pushSupported ? (
               <label className="flex items-center gap-2 text-sm">
@@ -629,6 +627,7 @@ export default function SettingsPage() {
                   checked={pushEnabled}
                   disabled={pushLoading}
                   onChange={togglePush}
+                  className="h-4 w-4"
                 />
                 プッシュ通知を有効にする
                 {pushLoading && (
@@ -642,7 +641,7 @@ export default function SettingsPage() {
             )}
           </div>
 
-          <div className="space-y-3">
+          <div className={cardCls} style={cardStyle}>
             <h2 className={sectionTitleCls}>既読</h2>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -651,12 +650,13 @@ export default function SettingsPage() {
                 onChange={(e) =>
                   setSettings({ ...settings, autoMarkAsRead: e.target.checked })
                 }
+                className="h-4 w-4"
               />
               記事を開いたら自動的に既読にする
             </label>
           </div>
 
-          <div>
+          <div className="flex justify-end">
             <button
               onClick={saveNotification}
               disabled={notifSaving}
@@ -671,9 +671,21 @@ export default function SettingsPage() {
 
       {/* 連携タブ */}
       {activeTab === "integration" && (
-        <section className="mt-6 space-y-4">
-          <div className="space-y-3">
-            <h2 className={sectionTitleCls}>X (Twitter) 連携</h2>
+        <section className="space-y-4">
+          <div className={cardCls} style={cardStyle}>
+            <div className="flex items-center justify-between">
+              <h2 className={sectionTitleCls}>X (Twitter) 連携</h2>
+              <span
+                className="shrink-0 rounded-full px-2 py-0.5 text-xs"
+                style={{
+                  background: xConnected ? "var(--accent-subtle)" : "transparent",
+                  color: xConnected ? "var(--accent)" : "var(--muted)",
+                  border: xConnected ? "none" : "1px solid var(--card-border)",
+                }}
+              >
+                {xConnected ? "連携中" : "未連携"}
+              </span>
+            </div>
             <div>
               <label className={labelCls}>X Client ID</label>
               <input
@@ -681,7 +693,7 @@ export default function SettingsPage() {
                 placeholder={xHasClientId ? "(設定済み) 変更する場合のみ入力" : "未設定"}
                 value={xClientId}
                 onChange={(e) => setXClientId(e.target.value)}
-                className="w-full rounded border px-3 py-2"
+                className={inputCls}
                 style={inputStyle}
               />
             </div>
@@ -689,38 +701,25 @@ export default function SettingsPage() {
               <label className={labelCls}>
                 X Client Secret (Confidential clientのみ)
               </label>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  placeholder={xHasClientSecret ? "(設定済み) 変更する場合のみ入力" : "Public clientなら未入力でOK"}
-                  value={xClientSecret}
-                  onChange={(e) => setXClientSecret(e.target.value)}
-                  className="flex-1 rounded border px-3 py-2"
-                  style={inputStyle}
-                />
-                <button
-                  onClick={saveXClientId}
-                  disabled={xSaving || (!xClientId && !xClientSecret)}
-                  className={primaryBtnCls}
-                  style={primaryBtnStyle}
-                >
-                  保存
-                </button>
-              </div>
+              <input
+                type="password"
+                placeholder={xHasClientSecret ? "(設定済み) 変更する場合のみ入力" : "Public clientなら未入力でOK"}
+                value={xClientSecret}
+                onChange={(e) => setXClientSecret(e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              />
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {xConnected ? (
-                <>
-                  <span className="text-sm" style={{ color: "var(--muted)" }}>連携済み</span>
-                  <button
-                    onClick={disconnectX}
-                    disabled={xSaving}
-                    className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50"
-                    style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-                  >
-                    連携解除
-                  </button>
-                </>
+                <button
+                  onClick={disconnectX}
+                  disabled={xSaving}
+                  className="rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
+                  style={{ background: "var(--bg)", border: "1px solid var(--card-border)" }}
+                >
+                  連携解除
+                </button>
               ) : (
                 <button
                   onClick={() => {
@@ -728,23 +727,34 @@ export default function SettingsPage() {
                     window.location.href = "/api/x/auth";
                   }}
                   disabled={!xHasClientId}
-                  className={primaryBtnCls}
-                  style={primaryBtnStyle}
+                  className="rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
+                  style={{ background: "var(--bg)", border: "1px solid var(--card-border)" }}
                 >
                   Xと連携する
                 </button>
               )}
+              <button
+                onClick={saveXClientId}
+                disabled={xSaving || (!xClientId && !xClientSecret)}
+                className={primaryBtnCls}
+                style={primaryBtnStyle}
+              >
+                {xSaving ? "保存中..." : "保存"}
+              </button>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <h2 className={sectionTitleCls}>インポート / エクスポート</h2>
+          <div className={cardCls} style={cardStyle}>
+            <h2 className={sectionTitleCls}>OPML</h2>
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              他のフィードリーダーとフィードリストをやり取りできます。
+            </p>
             <div className="flex flex-wrap gap-2">
               <label
-                className="inline-block cursor-pointer rounded px-4 py-2 text-sm font-medium"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                className="inline-block cursor-pointer rounded-md px-4 py-2 text-sm font-medium"
+                style={{ background: "var(--bg)", border: "1px solid var(--card-border)" }}
               >
-                {opmlImporting ? "インポート中..." : "OPMLインポート"}
+                {opmlImporting ? "インポート中..." : "📥 インポート"}
                 <input
                   type="file"
                   accept=".opml,.xml,application/xml,text/xml"
@@ -756,10 +766,10 @@ export default function SettingsPage() {
               <a
                 href="/api/feeds/export"
                 download="yomu-feeds.opml"
-                className="inline-block rounded px-4 py-2 text-sm font-medium"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                className="inline-block rounded-md px-4 py-2 text-sm font-medium"
+                style={{ background: "var(--bg)", border: "1px solid var(--card-border)" }}
               >
-                OPMLエクスポート
+                📤 エクスポート
               </a>
             </div>
           </div>
@@ -768,18 +778,18 @@ export default function SettingsPage() {
 
       {/* アカウントタブ */}
       {activeTab === "account" && (
-        <section className="mt-6 space-y-4">
-          <div className="space-y-3">
+        <section className="space-y-4">
+          <div className={cardCls} style={cardStyle}>
             <h2 className={sectionTitleCls}>テーマ</h2>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-sm" style={{ color: "var(--muted)" }}>
-                ライト / ダーク / システム
+                右のボタンでライト ↔ ダークを切替
               </span>
               <ThemeToggle />
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className={cardCls} style={cardStyle}>
             <h2 className={sectionTitleCls}>パスワード変更</h2>
             <div className="space-y-2">
               <input
@@ -809,11 +819,13 @@ export default function SettingsPage() {
                 style={inputStyle}
                 autoComplete="new-password"
               />
+            </div>
+            <div className="flex justify-end">
               <button
                 onClick={changePw}
                 disabled={pwSaving}
-                className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+                className={primaryBtnCls}
+                style={primaryBtnStyle}
               >
                 {pwSaving ? "変更中..." : "パスワードを変更"}
               </button>
