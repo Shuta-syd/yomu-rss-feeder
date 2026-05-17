@@ -6,13 +6,16 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 interface Props {
   feeds: FeedWithUnread[];
   selectedFeedId: string | null;
+  selectedCategory: string | null;
   onSelect: (feedId: string | null) => void;
+  onSelectCategory: (category: string) => void;
   onAddFeed: () => void;
   onSync: () => void;
   syncing: boolean;
   onLogout: () => void;
   onFeedMoved?: () => void;
   onFeedsDeleted?: () => void;
+  onCategoryRenamed?: (oldName: string, newName: string) => void;
   isMobile?: boolean;
   view?: "feeds" | "likes" | "starred";
   onSelectLikes?: () => void;
@@ -22,13 +25,16 @@ interface Props {
 export function FeedSidebar({
   feeds,
   selectedFeedId,
+  selectedCategory,
   onSelect,
+  onSelectCategory,
   onAddFeed,
   onSync,
   syncing,
   onLogout,
   onFeedMoved,
   onFeedsDeleted,
+  onCategoryRenamed,
   isMobile,
   view = "feeds",
   onSelectLikes,
@@ -119,13 +125,17 @@ export function FeedSidebar({
   }
 
   async function renameCategory(oldName: string, newName: string) {
-    if (oldName === newName || !newName.trim()) return;
+    const trimmed = newName.trim();
+    if (oldName === trimmed || !trimmed) return;
     const res = await fetch("/api/categories", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ oldName, newName: newName.trim() }),
+      body: JSON.stringify({ oldName, newName: trimmed }),
     });
-    if (res.ok) onFeedMoved?.();
+    if (res.ok) {
+      onFeedMoved?.();
+      onCategoryRenamed?.(oldName, trimmed);
+    }
   }
 
   return (
@@ -196,7 +206,9 @@ export function FeedSidebar({
               className="flex w-full items-center justify-between rounded px-2 py-1"
               style={{
                 background:
-                  view === "feeds" && selectedFeedId === null
+                  view === "feeds" &&
+                  selectedFeedId === null &&
+                  selectedCategory === null
                     ? "var(--accent-subtle)"
                     : "transparent",
               }}
@@ -238,7 +250,9 @@ export function FeedSidebar({
             category={cat}
             feeds={grouped[cat]!}
             selectedFeedId={selectedFeedId}
+            selectedCategory={selectedCategory}
             onSelect={onSelect}
+            onSelectCategory={onSelectCategory}
             dragFeedId={dragFeedId}
             onDragStart={setDragFeedId}
             onDrop={moveFeedToCategory}
@@ -289,7 +303,9 @@ function CategoryGroup({
   category,
   feeds,
   selectedFeedId,
+  selectedCategory,
   onSelect,
+  onSelectCategory,
   dragFeedId,
   onDragStart,
   onDrop,
@@ -302,7 +318,9 @@ function CategoryGroup({
   category: string;
   feeds: FeedWithUnread[];
   selectedFeedId: string | null;
+  selectedCategory: string | null;
   onSelect: (id: string | null) => void;
+  onSelectCategory: (category: string) => void;
   dragFeedId: string | null;
   onDragStart: (id: string | null) => void;
   onDrop: (feedId: string, category: string) => void;
@@ -327,6 +345,8 @@ function CategoryGroup({
 
   const catAllChecked = selectMode && feeds.every((f) => selectedIds.has(f.id));
   const catSomeChecked = selectMode && !catAllChecked && feeds.some((f) => selectedIds.has(f.id));
+  const unreadTotal = feeds.reduce((n, f) => n + (f.unreadCount ?? 0), 0);
+  const isSelected = !selectMode && selectedCategory === category;
 
   function handleDragOver(e: React.DragEvent) {
     if (selectMode) return;
@@ -360,12 +380,16 @@ function CategoryGroup({
 
   return (
     <div
-      className="mt-3 rounded border-t pt-2 transition-colors"
+      className="group/cat mt-3 rounded border-t pt-2 transition-colors"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       style={{
-        background: dropTarget ? "var(--accent-subtle)" : "transparent",
+        background: dropTarget
+          ? "var(--accent-subtle)"
+          : isSelected
+            ? "var(--accent-subtle)"
+            : "transparent",
         outline: dropTarget ? "2px dashed var(--accent)" : "none",
         outlineOffset: "-2px",
         borderColor: "var(--card-border)",
@@ -396,16 +420,35 @@ function CategoryGroup({
           style={{ borderColor: "var(--accent)", background: "var(--card)" }}
         />
       ) : (
-        <button
-          onClick={() => setOpen(!open)}
-          onDoubleClick={(e) => { e.preventDefault(); setEditing(true); }}
-          className="flex w-full items-center justify-between px-2 text-xs uppercase"
-          style={{ color: "var(--muted)" }}
-          title="ダブルクリックで名前変更"
-        >
-          <span>{category}</span>
-          <span>{open ? "▾" : "▸"}</span>
-        </button>
+        <div className="flex items-center px-2 text-xs uppercase" style={{ color: "var(--muted)" }}>
+          <button
+            onClick={() => onSelectCategory(category)}
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+            title="クリックでカテゴリ全体を表示"
+          >
+            <span className="truncate">{category}</span>
+            {unreadTotal > 0 && (
+              <span className="shrink-0 normal-case" style={{ color: "var(--muted)" }}>
+                {unreadTotal}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+            className="ml-1 shrink-0 rounded px-1 opacity-0 transition-opacity group-hover/cat:opacity-100"
+            title="名前を変更"
+            aria-label="カテゴリ名を変更"
+          >
+            ✎
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+            className="ml-1 shrink-0 rounded px-1"
+            aria-label={open ? "折りたたむ" : "展開する"}
+          >
+            {open ? "▾" : "▸"}
+          </button>
+        </div>
       )}
       {(open || selectMode) && (
         <div className="mt-1">
