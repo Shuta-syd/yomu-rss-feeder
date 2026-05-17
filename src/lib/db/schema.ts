@@ -61,6 +61,7 @@ export const articles = sqliteTable(
     aiStage2Status: text("ai_stage2_status").notNull().default("none"),
     aiStage2Error: text("ai_stage2_error"),
     aiStage2ProcessedAt: integer("ai_stage2_processed_at"),
+    note: text("note"),
     createdAt: integer("created_at")
       .notNull()
       .$defaultFn(() => Date.now()),

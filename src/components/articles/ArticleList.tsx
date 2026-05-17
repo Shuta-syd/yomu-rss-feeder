@@ -94,6 +94,7 @@ export function ArticleList({ articles, selectedId, onSelect, onLoadMore, hasMor
                     />
                   )}
                   {a.isStarred && <span className="text-yellow-500">★</span>}
+                  {a.note && <span title="メモあり" aria-label="メモあり">📝</span>}
                   {a.aiStage1Status === "processing" && (
                     <span
                       className="mt-0.5 inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-t-transparent"

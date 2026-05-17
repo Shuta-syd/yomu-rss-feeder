@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { XLikesList } from "@/components/x/XLikesList";
 import { XAnalysisPanel } from "@/components/x/XAnalysisPanel";
 import { buildArticlesParams, type ReadFilter } from "@/lib/articles-params";
+import { subscribeUpdates } from "@/lib/article-note-saver";
 import type { FeedWithUnread } from "@/types/feed";
 import type { ArticleDTO } from "@/types/article";
 import type { XLike } from "@/lib/db/schema";
@@ -157,6 +158,13 @@ export default function FeedsPage() {
     const exists = feeds.some((f) => f.category === selectedCategory);
     if (!exists) setSelectedCategory(null);
   }, [feeds, selectedCategory]);
+
+  useEffect(() => {
+    return subscribeUpdates((updated) => {
+      setSelected((cur) => (cur?.id === updated.id ? updated : cur));
+      setArticles((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+    });
+  }, []);
 
   useEffect(() => {
     loadInitial();
@@ -486,9 +494,10 @@ export default function FeedsPage() {
         <div className="flex-1 overflow-hidden">
           {view !== "likes" ? (
             <ArticleDetail
+              key={selected?.id ?? "empty"}
               article={selected}
               onChange={(a) => {
-                setSelected(a);
+                setSelected((cur) => (cur?.id === a.id ? a : cur));
                 setArticles((prev) => prev.map((x) => (x.id === a.id ? a : x)));
               }}
             />

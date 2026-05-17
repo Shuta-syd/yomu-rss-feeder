@@ -24,6 +24,7 @@ export interface ArticleDTO {
   aiRelatedLinks: string | null;
   aiStage2Status: string;
   aiStage2Error: string | null;
+  note: string | null;
   createdAt: number;
 }
 

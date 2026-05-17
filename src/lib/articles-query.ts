@@ -36,7 +36,7 @@ function makeCursor(sortKey: number, id: string): string {
   return `${sortKey}_${id}`;
 }
 
-function rowToArticle(row: Record<string, unknown>): ArticleWithFeed {
+export function rowToArticle(row: Record<string, unknown>): ArticleWithFeed {
   return {
     id: row["id"] as string,
     feedId: row["feed_id"] as string,
@@ -67,6 +67,7 @@ function rowToArticle(row: Record<string, unknown>): ArticleWithFeed {
     aiStage2Status: row["ai_stage2_status"] as string,
     aiStage2Error: (row["ai_stage2_error"] as string | null) ?? null,
     aiStage2ProcessedAt: (row["ai_stage2_processed_at"] as number | null) ?? null,
+    note: (row["note"] as string | null) ?? null,
     createdAt: row["created_at"] as number,
   };
 }

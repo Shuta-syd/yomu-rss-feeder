@@ -2,6 +2,11 @@
 
 import type { ArticleDTO } from "@/types/article";
 import { useEffect, useState, useCallback } from "react";
+import {
+  scheduleNoteSave,
+  subscribeStatus,
+  type SaveStatus,
+} from "@/lib/article-note-saver";
 
 function humanizeError(raw: string): string {
   const s = raw.toLowerCase();
@@ -30,6 +35,20 @@ export function ArticleDetail({ article, onChange }: Props) {
   const [streamText, setStreamText] = useState("");
   const [showTranslation, setShowTranslation] = useState(false);
   const [stage1Loading, setStage1Loading] = useState(false);
+  const [note, setNote] = useState(article?.note ?? "");
+  const [noteOpen, setNoteOpen] = useState(Boolean(article?.note));
+  const [noteStatus, setNoteStatus] = useState<SaveStatus>("idle");
+
+  // 記事切替時に note state を初期化 (key prop で再マウントされるが、念のため)
+  useEffect(() => {
+    setNote(article?.note ?? "");
+    setNoteOpen(Boolean(article?.note));
+  }, [article?.id, article?.note]);
+
+  useEffect(() => {
+    if (!article) return;
+    return subscribeStatus(article.id, article.note ?? "", setNoteStatus);
+  }, [article?.id, article?.note]);
 
   const runStage1 = useCallback(async () => {
     if (!article) return;
@@ -196,6 +215,19 @@ export function ArticleDetail({ article, onChange }: Props) {
               {article.isStarred ? "★" : "☆"}
             </button>
             <button
+              onClick={() => setNoteOpen((v) => !v)}
+              className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
+              style={{
+                background: note ? "var(--accent-subtle)" : "var(--card)",
+                color: note ? "var(--accent)" : "inherit",
+                border: "1px solid var(--card-border)",
+              }}
+              title={note ? "メモあり" : "メモを追加"}
+              aria-expanded={noteOpen}
+            >
+              📝 {note ? "" : "メモ"}
+            </button>
+            <button
               onClick={() => toggle("isRead", !article.isRead)}
               className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
               style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
@@ -221,6 +253,30 @@ export function ArticleDetail({ article, onChange }: Props) {
           <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
             {article.aiSummaryShort}
           </p>
+        )}
+        {noteOpen && (
+          <div className="mt-3">
+            <textarea
+              value={note}
+              onChange={(e) => {
+                const v = e.target.value;
+                setNote(v);
+                scheduleNoteSave(article.id, v, article.note ?? "");
+              }}
+              placeholder="この記事についてのメモ・感想 (自動保存)"
+              rows={3}
+              className="w-full rounded-md border px-3 py-2 text-sm leading-relaxed"
+              style={{
+                background: "var(--bg)",
+                borderColor: "var(--card-border)",
+                resize: "vertical",
+              }}
+            />
+            <div className="mt-1 text-right text-xs" style={{ color: "var(--muted)" }}>
+              {noteStatus === "saving" && "保存中..."}
+              {noteStatus === "saved" && "✓ 保存済み"}
+            </div>
+          </div>
         )}
       </header>
 
