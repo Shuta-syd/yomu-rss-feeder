@@ -4,11 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FeedSidebar } from "@/components/feeds/FeedSidebar";
 import { AddFeedDialog } from "@/components/feeds/AddFeedDialog";
+import { ReadFilterToggle } from "@/components/feeds/ReadFilterToggle";
 import { ArticleList } from "@/components/articles/ArticleList";
 import { ArticleDetail } from "@/components/articles/ArticleDetail";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { XLikesList } from "@/components/x/XLikesList";
 import { XAnalysisPanel } from "@/components/x/XAnalysisPanel";
+import { buildArticlesParams, type ReadFilter } from "@/lib/articles-params";
 import type { FeedWithUnread } from "@/types/feed";
 import type { ArticleDTO } from "@/types/article";
 import type { XLike } from "@/lib/db/schema";
@@ -20,6 +22,10 @@ export default function FeedsPage() {
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<ArticleDTO | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [readFilter, setReadFilter] = useState<ReadFilter>("all");
+  const abortRef = useRef<AbortController | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
@@ -82,20 +88,65 @@ export default function FeedsPage() {
     setFeeds(data.feeds);
   }, [router]);
 
-  const loadArticles = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (selectedFeedId) params.set("feedId", selectedFeedId);
-    else if (selectedCategory) params.set("category", selectedCategory);
-    if (search) params.set("search", search);
-    if (view === "starred") params.set("isStarred", "true");
-    const res = await fetch(`/api/articles?${params}`);
-    if (res.status === 401) {
-      router.replace("/login");
-      return;
+  const loadInitial = useCallback(async () => {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    const params = buildArticlesParams({
+      feedId: selectedFeedId,
+      category: selectedCategory,
+      search,
+      view,
+      readFilter,
+    });
+    try {
+      const res = await fetch(`/api/articles?${params}`, { signal: ctrl.signal });
+      if (ctrl.signal.aborted) return;
+      if (res.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      const data = await res.json();
+      if (ctrl.signal.aborted) return;
+      setArticles(data.articles);
+      setNextCursor(data.nextCursor ?? null);
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") throw e;
     }
-    const data = await res.json();
-    setArticles(data.articles);
-  }, [selectedFeedId, selectedCategory, search, view, router]);
+  }, [selectedFeedId, selectedCategory, search, view, readFilter, router]);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    const ctrl = abortRef.current;
+    if (!ctrl) return;
+    setLoadingMore(true);
+    const params = buildArticlesParams({
+      feedId: selectedFeedId,
+      category: selectedCategory,
+      search,
+      view,
+      readFilter,
+      cursor: nextCursor,
+    });
+    try {
+      const res = await fetch(`/api/articles?${params}`, { signal: ctrl.signal });
+      if (ctrl.signal.aborted) return;
+      if (res.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        if (ctrl.signal.aborted) return;
+        setArticles((prev) => [...prev, ...data.articles]);
+        setNextCursor(data.nextCursor ?? null);
+      }
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") throw e;
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextCursor, loadingMore, selectedFeedId, selectedCategory, search, view, readFilter, router]);
 
   useEffect(() => {
     loadFeeds();
@@ -108,8 +159,8 @@ export default function FeedsPage() {
   }, [feeds, selectedCategory]);
 
   useEffect(() => {
-    loadArticles();
-  }, [loadArticles]);
+    loadInitial();
+  }, [loadInitial]);
 
   const loadLikes = useCallback(async () => {
     setLikesLoading(true);
@@ -169,13 +220,13 @@ export default function FeedsPage() {
     const active = (aiStatus?.pending ?? 0) + (aiStatus?.processing ?? 0) > 0;
     const interval = setInterval(() => {
       poll();
-      if (active) loadArticles();
+      if (active) loadInitial();
     }, active ? 5000 : 30000);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [aiStatus?.pending, aiStatus?.processing, loadArticles]);
+  }, [aiStatus?.pending, aiStatus?.processing, loadInitial]);
 
   async function markAllRead() {
     setMarkingRead(true);
@@ -189,7 +240,7 @@ export default function FeedsPage() {
     });
     setMarkingRead(false);
     if (res.ok) {
-      loadArticles();
+      loadInitial();
       loadFeeds();
     }
   }
@@ -200,7 +251,7 @@ export default function FeedsPage() {
     setSyncing(false);
     if (res.ok) {
       loadFeeds();
-      loadArticles();
+      loadInitial();
     }
   }
 
@@ -265,7 +316,7 @@ export default function FeedsPage() {
           onFeedMoved={loadFeeds}
           onFeedsDeleted={() => {
             loadFeeds();
-            loadArticles();
+            loadInitial();
             setSelected(null);
             setSelectedFeedId(null);
             setSelectedCategory(null);
@@ -320,6 +371,7 @@ export default function FeedsPage() {
                 className="flex-1 rounded px-2 py-1 text-sm"
                 style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
               />
+              <ReadFilterToggle value={readFilter} onChange={setReadFilter} />
               <button
                 onClick={markAllRead}
                 disabled={markingRead || articles.every((a) => a.isRead)}
@@ -376,6 +428,9 @@ export default function FeedsPage() {
               articles={articles}
               selectedId={selected?.id ?? null}
               onSelect={handleSelect}
+              onLoadMore={loadMore}
+              hasMore={nextCursor !== null}
+              loadingMore={loadingMore}
             />
           ) : xConnected === false ? (
             <div className="flex h-full flex-col items-center justify-center p-6 text-center text-sm" style={{ color: "var(--muted)" }}>
@@ -456,7 +511,7 @@ export default function FeedsPage() {
         onClose={() => setAddOpen(false)}
         onAdded={() => {
           loadFeeds();
-          loadArticles();
+          loadInitial();
         }}
       />
     </div>

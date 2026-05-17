@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ArticleDTO } from "@/types/article";
 
 function Thumbnail({ src }: { src: string }) {
@@ -22,6 +22,9 @@ interface Props {
   articles: ArticleDTO[];
   selectedId: string | null;
   onSelect: (a: ArticleDTO) => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 }
 
 function formatDate(ms: number | null): string {
@@ -34,7 +37,33 @@ function formatDate(ms: number | null): string {
   return d.toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
 }
 
-export function ArticleList({ articles, selectedId, onSelect }: Props) {
+export function ArticleList({ articles, selectedId, onSelect, onLoadMore, hasMore, loadingMore }: Props) {
+  const sentinelRef = useRef<HTMLLIElement>(null);
+  const scrollRef = useRef<HTMLUListElement>(null);
+  const firstId = articles[0]?.id ?? null;
+  const prevFirstIdRef = useRef<string | null>(firstId);
+
+  useEffect(() => {
+    if (prevFirstIdRef.current !== firstId) {
+      prevFirstIdRef.current = firstId;
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    }
+  }, [firstId]);
+
+  useEffect(() => {
+    if (!hasMore || !onLoadMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onLoadMore();
+      },
+      { rootMargin: "200px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, onLoadMore]);
+
   if (articles.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-sm" style={{ color: "var(--muted)" }}>
@@ -43,7 +72,7 @@ export function ArticleList({ articles, selectedId, onSelect }: Props) {
     );
   }
   return (
-    <ul className="h-full overflow-y-auto">
+    <ul ref={scrollRef} className="h-full overflow-y-auto">
       {articles.map((a) => (
         <li key={a.id}>
           <button
@@ -99,6 +128,15 @@ export function ArticleList({ articles, selectedId, onSelect }: Props) {
           </button>
         </li>
       ))}
+      {hasMore && (
+        <li
+          ref={sentinelRef}
+          className="flex h-12 items-center justify-center text-xs"
+          style={{ color: "var(--muted)" }}
+        >
+          {loadingMore ? "読み込み中..." : ""}
+        </li>
+      )}
     </ul>
   );
 }
