@@ -354,7 +354,7 @@ export default function FeedsPage() {
           {isMobile && (
             <button
               onClick={() => goToMobileView("sidebar")}
-              className="rounded px-2 py-1 text-lg"
+              className="shrink-0 rounded px-2 py-1 text-sm"
               style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
               aria-label="フィード一覧"
             >
@@ -368,18 +368,19 @@ export default function FeedsPage() {
                 placeholder="検索..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 rounded px-2 py-1 text-sm"
+                className="min-w-0 flex-1 rounded px-2 py-1 text-sm"
                 style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
               />
               <ReadFilterToggle value={readFilter} onChange={setReadFilter} />
               <button
                 onClick={markAllRead}
                 disabled={markingRead || articles.every((a) => a.isRead)}
-                className="rounded px-2 py-1 text-xs disabled:opacity-40"
+                className="shrink-0 rounded px-2 py-1 text-sm disabled:opacity-40"
                 style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
                 title="表示中をすべて既読"
+                aria-label="表示中をすべて既読"
               >
-                {markingRead ? "..." : "全て既読"}
+                {markingRead ? "…" : "✓"}
               </button>
             </>
           ) : (
@@ -403,8 +404,9 @@ export default function FeedsPage() {
           <ThemeToggle />
           <a
             href="/settings"
-            className="rounded px-2 py-1 text-xs"
+            className="shrink-0 rounded px-2 py-1 text-sm"
             style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+            aria-label="設定"
           >
             ⚙
           </a>

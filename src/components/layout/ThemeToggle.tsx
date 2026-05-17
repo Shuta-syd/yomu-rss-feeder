@@ -26,7 +26,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="rounded px-2 py-1 text-xs"
+      className="shrink-0 rounded px-2 py-1 text-sm"
       style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
       aria-label="Toggle theme"
     >
