@@ -51,7 +51,26 @@ if ("note" in parsed.data) {
 }
 ```
 
-それ以外の挙動は既存のまま（更新後の row を返す）。
+#### レスポンス形を `ArticleDTO` に統一
+
+**既存バグの修正を合わせて行う**。現在の PATCH は更新後に `db.select().from(articles).where(...)` で raw row をそのまま返すため、`feedTitle` が落ちる ([src/app/api/articles/\[id\]/route.ts:47](../../../src/app/api/articles/[id]/route.ts#L47))。クライアントはこれを記事リスト行とも置き換えるため、PATCH 後の記事は `feedTitle = undefined` で再描画され、リスト行の右下のフィード名が消える既存バグがある。
+
+このバグは note 機能が同じパターンで PATCH を投げることで顕在化するので、合わせて修正する。具体的には PATCH ハンドラを以下のように改める:
+
+```ts
+import { rawDb } from "@/lib/db";
+// ...
+db.update(articles).set(updates).where(eq(articles.id, id)).run();
+const row = rawDb
+  .prepare(
+    "SELECT a.*, f.title AS feed_title FROM articles a LEFT JOIN feeds f ON f.id = a.feed_id WHERE a.id = ?",
+  )
+  .get(id) as Record<string, unknown> | undefined;
+if (!row) return jsonError(404, "Not found");
+return NextResponse.json(rowToArticle(row));
+```
+
+`rowToArticle` は [src/lib/articles-query.ts:38](../../../src/lib/articles-query.ts#L38) のものを export して再利用する。これで list と PATCH の DTO 形が完全一致する。
 
 ### 型
 
@@ -81,38 +100,97 @@ if ("note" in parsed.data) {
 
 #### 保存方式
 
-debounce 500ms の自動保存。`textarea` の onChange でローカル state を更新し、500ms 入力が止まったら `PATCH /api/articles/[id]` を投げる。保存中・保存済みのインジケータを下部に小さく出す。
+debounce 500ms の自動保存。textarea onChange でローカル state を更新し、500ms 入力が止まったら `PATCH /api/articles/[id]` を投げる。保存中・保存済みのインジケータを下部に小さく出す。
+
+##### 競合・記事切替の取り扱い (Codex レビュー反映)
+
+3 つの落とし穴を踏まないよう、以下のロジックを採用する。
+
+**(a) 記事切替時に下書きをロスせず flush する**
+
+`ArticleDetail` は親 (`FeedsPage`) が同じインスタンスのまま `article` prop を差し替えるため、`useState(article.note ?? "")` の初期化が走り直さない。これを `article.id` を key にした再マウント（`<ArticleDetail key={article.id} ... />` 親側で指定）で解決する。再マウントすることで note 編集中の state は完全に新規になる。
+
+ただし「再マウント = unmount → mount」で**前の記事の編集中下書きが破棄される**ので、unmount 時に保留中の debounce が残っていれば**同期的に flush** する必要がある:
 
 ```tsx
-const [note, setNote] = useState(article.note ?? "");
-const [savingState, setSavingState] = useState<"idle" | "saving" | "saved">("idle");
-const lastSavedRef = useRef(article.note ?? "");
+// In ArticleDetail
+const pendingArticleIdRef = useRef(article.id);
+const pendingNoteRef = useRef<string | null>(null);
 
 useEffect(() => {
-  if (note === lastSavedRef.current) return;
-  setSavingState("saving");
-  const t = setTimeout(async () => {
-    const res = await fetch(`/api/articles/${article.id}`, {
+  pendingArticleIdRef.current = article.id;
+}, [article.id]);
+
+useEffect(() => {
+  // unmount cleanup: flush pending edit synchronously via sendBeacon or keepalive fetch
+  return () => {
+    const pending = pendingNoteRef.current;
+    const id = pendingArticleIdRef.current;
+    if (pending === null) return;
+    // fire-and-forget but flagged to keep alive past unmount
+    fetch(`/api/articles/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: note.trim() || null }),
+      body: JSON.stringify({ note: pending.trim() || null }),
+      keepalive: true,
+    }).catch(() => {});
+  };
+}, []);
+```
+
+`pendingNoteRef` は debounce タイマーが現在保留している note 内容。タイマー発火時または cleanup 時に null にする。
+
+**(b) 並行 PATCH レースの防止**
+
+debounce が短時間に複数回成立すると、最後の PATCH が最初に完了して上書きされる可能性がある。`AbortController` で**前回の PATCH を必ずキャンセル**してから新規 PATCH を投げる:
+
+```tsx
+const abortRef = useRef<AbortController | null>(null);
+
+const flushSave = useCallback(async (id: string, value: string | null) => {
+  abortRef.current?.abort();
+  const ctrl = new AbortController();
+  abortRef.current = ctrl;
+  setSavingState("saving");
+  try {
+    const res = await fetch(`/api/articles/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: value }),
+      signal: ctrl.signal,
     });
+    if (ctrl.signal.aborted) return;
     if (res.ok) {
       const updated = await res.json();
       lastSavedRef.current = updated.note ?? "";
+      pendingNoteRef.current = null;
       setSavingState("saved");
       onChange?.(updated);
     } else {
       setSavingState("idle");
     }
-  }, 500);
-  return () => clearTimeout(t);
-}, [note, article.id]);
+  } catch (e) {
+    if ((e as Error).name !== "AbortError") setSavingState("idle");
+  }
+}, [onChange]);
 ```
+
+**(c) 親の `onChange` で違う記事を上書きしない**
+
+PATCH が遅延して別記事に切り替わった後に解決する場合、親側が `setSelected(updated)` を無条件に呼ぶと表示中の別記事が前の記事に切り替わってしまう。親 ([src/app/feeds/page.tsx:490](../../../src/app/feeds/page.tsx#L490)) の `onChange` ハンドラを以下に変更:
+
+```ts
+onChange={(a) => {
+  setSelected((cur) => (cur?.id === a.id ? a : cur));
+  setArticles((prev) => prev.map((x) => (x.id === a.id ? a : x)));
+}}
+```
+
+これで `setSelected` は現在表示中の記事と同一 ID のときだけ反映し、リストは id 基準で独立に更新される。**この変更は既存の isRead/isStarred 更新フローにも安全（むしろより堅牢）**。
 
 #### 開閉状態の永続化
 
-折りたたみのデフォルトは「メモが空のときは閉じる / 既存メモがあるときは自動的に開く」。localStorage 等での永続化はしない（記事ごとに自然な挙動）。
+折りたたみのデフォルトは「メモが空のときは閉じる / 既存メモがあるときは自動的に開く」。`article.id` を key にした再マウントなので、記事切替ごとに自然にデフォルト状態に戻る。localStorage 永続化はしない。
 
 #### 記事リスト行のインジケータ
 
@@ -165,6 +243,8 @@ useEffect(() => {
 | `src/lib/articles-query.ts` | `rowToArticle` で `note` 読み出し |
 | `src/types/article.ts` | `ArticleDTO.note: string \| null` 追加 |
 | `src/app/api/articles/[id]/route.ts` | `patchSchema` に `note` 追加 + trim 正規化 |
-| `src/components/articles/ArticleDetail.tsx` | メモ折りたたみ UI + debounce 保存 |
+| `src/components/articles/ArticleDetail.tsx` | メモ折りたたみ UI + debounce 保存 + AbortController + unmount flush |
+| `src/app/feeds/page.tsx` | `<ArticleDetail key={selected.id}>` で記事切替時に再マウント、`onChange` を id 比較ガード付きに変更 |
+| `src/lib/articles-query.ts` | `rowToArticle` を export (PATCH ハンドラから再利用するため) |
 | `src/components/articles/ArticleList.tsx` | 📝 インジケータ表示 |
 | `__tests__/lib/article-note.test.ts` (新規) | API 正規化ロジックのテスト |
