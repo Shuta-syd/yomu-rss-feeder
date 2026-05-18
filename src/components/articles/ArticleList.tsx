@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ArticleDTO } from "@/types/article";
+import { dateKey, formatDateHeader } from "@/lib/article-date";
 
 function Thumbnail({ src }: { src: string }) {
   const [failed, setFailed] = useState(false);
@@ -64,6 +65,8 @@ export function ArticleList({ articles, selectedId, onSelect, onLoadMore, hasMor
     return () => io.disconnect();
   }, [hasMore, onLoadMore]);
 
+  const now = useMemo(() => Date.now(), [firstId]);
+
   if (articles.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-sm" style={{ color: "var(--muted)" }}>
@@ -71,10 +74,29 @@ export function ArticleList({ articles, selectedId, onSelect, onLoadMore, hasMor
       </div>
     );
   }
+
+  let prevKey: string | null = null;
   return (
     <ul ref={scrollRef} className="h-full overflow-y-auto">
-      {articles.map((a) => (
-        <li key={a.id}>
+      {articles.map((a) => {
+        const curKey = dateKey(a.sortKey);
+        const showHeader = curKey !== prevKey;
+        prevKey = curKey;
+        return (
+          <Fragment key={a.id}>
+            {showHeader && (
+              <li
+                className="sticky top-0 z-10 border-b px-4 py-1.5 text-xs font-semibold"
+                style={{
+                  background: "var(--sidebar-bg)",
+                  color: "var(--muted)",
+                  borderColor: "var(--card-border)",
+                }}
+              >
+                {formatDateHeader(a.sortKey, now)}
+              </li>
+            )}
+            <li>
           <button
             onClick={() => onSelect(a)}
             className="flex w-full flex-col gap-1 border-b px-4 py-3 text-left transition-colors hover:bg-[var(--accent-subtle)]"
@@ -127,8 +149,10 @@ export function ArticleList({ articles, selectedId, onSelect, onLoadMore, hasMor
               </div>
             </div>
           </button>
-        </li>
-      ))}
+            </li>
+          </Fragment>
+        );
+      })}
       {hasMore && (
         <li
           ref={sentinelRef}
