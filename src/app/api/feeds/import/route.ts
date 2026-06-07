@@ -12,11 +12,15 @@ interface ImportError {
   error: string;
 }
 
+const MAX_OPML_BYTES = 2 * 1024 * 1024;
+const MAX_OPML_ENTRIES = 500;
+
 export async function POST(req: NextRequest) {
   return withAuth(async () => {
     const form = await req.formData().catch(() => null);
     const file = form?.get("file");
     if (!(file instanceof File)) return jsonError(400, "file required");
+    if (file.size > MAX_OPML_BYTES) return jsonError(413, "OPML file is too large");
 
     const xml = await file.text();
     let entries;
@@ -24,6 +28,9 @@ export async function POST(req: NextRequest) {
       entries = parseOpml(xml);
     } catch (e) {
       return jsonError(422, `OPML parse failed: ${String(e)}`);
+    }
+    if (entries.length > MAX_OPML_ENTRIES) {
+      return jsonError(413, `OPML contains too many feeds (max ${MAX_OPML_ENTRIES})`);
     }
 
     let imported = 0;

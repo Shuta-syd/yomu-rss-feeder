@@ -48,6 +48,49 @@ export const PROVIDER_MODELS: Record<ProviderType, string[]> = {
   ],
 };
 
+export class InvalidSettingsError extends Error {}
+
+function providerForModel(model: string): ProviderType | null {
+  for (const provider of Object.keys(PROVIDER_MODELS) as ProviderType[]) {
+    if (PROVIDER_MODELS[provider].includes(model)) return provider;
+  }
+  return null;
+}
+
+function resolveStageModel(
+  currentProvider: ProviderType,
+  currentModel: string,
+  inputProvider?: ProviderType,
+  inputModel?: string,
+): { provider: ProviderType; model: string } {
+  if (inputModel) {
+    const modelProvider = providerForModel(inputModel);
+    if (!modelProvider) {
+      throw new InvalidSettingsError(`Unsupported model: ${inputModel}`);
+    }
+    if (inputProvider && inputProvider !== modelProvider) {
+      throw new InvalidSettingsError(`Model ${inputModel} does not belong to ${inputProvider}`);
+    }
+    return { provider: modelProvider, model: inputModel };
+  }
+
+  if (inputProvider) {
+    const currentModelProvider = providerForModel(currentModel);
+    if (inputProvider === currentProvider && currentModelProvider === inputProvider) {
+      return { provider: inputProvider, model: currentModel };
+    }
+    return { provider: inputProvider, model: PROVIDER_MODELS[inputProvider][0]! };
+  }
+
+  const currentModelProvider = providerForModel(currentModel);
+  if (currentModelProvider) {
+    return { provider: inputProvider ?? currentModelProvider, model: currentModel };
+  }
+
+  const provider = inputProvider ?? currentProvider;
+  return { provider, model: PROVIDER_MODELS[provider][0]! };
+}
+
 function get(key: string): string | undefined {
   return db.select().from(appConfig).where(eq(appConfig.key, key)).get()?.value;
 }
@@ -88,8 +131,6 @@ export interface SettingsUpdate {
   geminiModelStage2?: string;
   theme?: Settings["theme"];
   autoMarkAsRead?: boolean;
-  xClientId?: string;
-  xClientSecret?: string | null;
 }
 
 function updateApiKey(dbKey: string, value: string | null | undefined): void {
@@ -102,24 +143,30 @@ function updateApiKey(dbKey: string, value: string | null | undefined): void {
 }
 
 export function updateSettings(input: SettingsUpdate): Settings {
+  const current = getSettings();
+  const stage1 = resolveStageModel(
+    current.stage1Provider,
+    current.geminiModelStage1,
+    input.stage1Provider,
+    input.geminiModelStage1,
+  );
+  const stage2 = resolveStageModel(
+    current.stage2Provider,
+    current.geminiModelStage2,
+    input.stage2Provider,
+    input.geminiModelStage2,
+  );
+
   updateApiKey("gemini_api_key", input.geminiApiKey);
   updateApiKey("openai_api_key", input.openaiApiKey);
   updateApiKey("anthropic_api_key", input.anthropicApiKey);
-  if (input.stage1Provider) set("stage1_provider", input.stage1Provider);
-  if (input.stage2Provider) set("stage2_provider", input.stage2Provider);
-  if (input.geminiModelStage1) set("gemini_model_stage1", input.geminiModelStage1);
-  if (input.geminiModelStage2) set("gemini_model_stage2", input.geminiModelStage2);
+  set("stage1_provider", stage1.provider);
+  set("stage2_provider", stage2.provider);
+  set("gemini_model_stage1", stage1.model);
+  set("gemini_model_stage2", stage2.model);
   if (input.theme) set("theme", input.theme);
   if (input.autoMarkAsRead !== undefined) {
     set("auto_mark_as_read", input.autoMarkAsRead ? "true" : "false");
-  }
-  if (input.xClientId) set("x_client_id", input.xClientId);
-  if (input.xClientSecret !== undefined) {
-    if (input.xClientSecret === null || input.xClientSecret === "") {
-      del("x_client_secret");
-    } else {
-      set("x_client_secret", encrypt(input.xClientSecret));
-    }
   }
   return getSettings();
 }

@@ -18,8 +18,7 @@ interface Props {
   onFeedsDeleted?: () => void;
   onCategoryRenamed?: (oldName: string, newName: string) => void;
   isMobile?: boolean;
-  view?: "feeds" | "likes" | "starred";
-  onSelectLikes?: () => void;
+  view?: "feeds" | "starred";
   onSelectStarred?: () => void;
 }
 
@@ -38,7 +37,6 @@ export function FeedSidebar({
   onCategoryRenamed,
   isMobile,
   view = "feeds",
-  onSelectLikes,
   onSelectStarred,
 }: Props) {
   const grouped = feeds.reduce<Record<string, FeedWithUnread[]>>((acc, f) => {
@@ -228,20 +226,6 @@ export function FeedSidebar({
             >
               <span className="text-yellow-500">★</span>
               <span>お気に入り</span>
-            </button>
-            <button
-              onClick={() => onSelectLikes?.()}
-              className="flex w-full items-center gap-2 rounded px-2 py-1"
-              style={{
-                background:
-                  view === "likes" ? "var(--accent-subtle)" : "transparent",
-                color: view === "likes" ? "inherit" : "var(--muted)",
-              }}
-            >
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="currentColor" aria-hidden>
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-              <span>いいね</span>
             </button>
           </>
         )}
@@ -507,4 +491,3 @@ function CategoryGroup({
     </div>
   );
 }
-

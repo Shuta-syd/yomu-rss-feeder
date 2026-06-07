@@ -38,17 +38,20 @@ export function ArticleDetail({ article, onChange }: Props) {
   const [note, setNote] = useState(article?.note ?? "");
   const [noteOpen, setNoteOpen] = useState(Boolean(article?.note));
   const [noteStatus, setNoteStatus] = useState<SaveStatus>("idle");
+  const articleId = article?.id ?? null;
+  const articleNote = article?.note ?? "";
+  const articleTranslation = article?.aiTranslation ?? null;
 
   // 記事切替時に note state を初期化 (key prop で再マウントされるが、念のため)
   useEffect(() => {
-    setNote(article?.note ?? "");
-    setNoteOpen(Boolean(article?.note));
-  }, [article?.id, article?.note]);
+    setNote(articleNote);
+    setNoteOpen(Boolean(articleNote));
+  }, [articleId, articleNote]);
 
   useEffect(() => {
-    if (!article) return;
-    return subscribeStatus(article.id, article.note ?? "", setNoteStatus);
-  }, [article?.id, article?.note]);
+    if (!articleId) return;
+    return subscribeStatus(articleId, articleNote, setNoteStatus);
+  }, [articleId, articleNote]);
 
   const runStage1 = useCallback(async () => {
     if (!article) return;
@@ -67,8 +70,8 @@ export function ArticleDetail({ article, onChange }: Props) {
     setAiLoading(false);
     setStreamText("");
     // 記事切替時、翻訳があればデフォルトで日本語表示
-    setShowTranslation(!!article?.aiTranslation);
-  }, [article?.id, article?.aiTranslation]);
+    setShowTranslation(!!articleTranslation);
+  }, [articleId, articleTranslation]);
 
   const runAi = useCallback(async () => {
     if (!article) return;

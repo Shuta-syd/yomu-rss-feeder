@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { ArticleDTO } from "@/types/article";
 import { dateKey, formatDateHeader } from "@/lib/article-date";
 
@@ -43,12 +43,17 @@ export function ArticleList({ articles, selectedId, onSelect, onLoadMore, hasMor
   const scrollRef = useRef<HTMLUListElement>(null);
   const firstId = articles[0]?.id ?? null;
   const prevFirstIdRef = useRef<string | null>(firstId);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (prevFirstIdRef.current !== firstId) {
       prevFirstIdRef.current = firstId;
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
     }
+  }, [firstId]);
+
+  useEffect(() => {
+    setNow(Date.now());
   }, [firstId]);
 
   useEffect(() => {
@@ -64,8 +69,6 @@ export function ArticleList({ articles, selectedId, onSelect, onLoadMore, hasMor
     io.observe(el);
     return () => io.disconnect();
   }, [hasMore, onLoadMore]);
-
-  const now = useMemo(() => Date.now(), [firstId]);
 
   if (articles.length === 0) {
     return (

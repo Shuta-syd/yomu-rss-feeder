@@ -1,6 +1,6 @@
 const CACHE_NAME = "yomu-v2";
 
-self.addEventListener("install", (e) => {
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 

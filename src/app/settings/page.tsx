@@ -100,12 +100,6 @@ export default function SettingsPage() {
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [xClientId, setXClientId] = useState("");
-  const [xClientSecret, setXClientSecret] = useState("");
-  const [xConnected, setXConnected] = useState(false);
-  const [xHasClientId, setXHasClientId] = useState(false);
-  const [xHasClientSecret, setXHasClientSecret] = useState(false);
-  const [xSaving, setXSaving] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
@@ -190,15 +184,6 @@ export default function SettingsPage() {
       });
     }
 
-    fetch("/api/x/status")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d) {
-          setXConnected(d.connected);
-          setXHasClientId(d.hasClientId);
-          setXHasClientSecret(!!d.hasClientSecret);
-        }
-      });
   }, [router]);
 
   useEffect(() => {
@@ -307,45 +292,6 @@ export default function SettingsPage() {
       console.error(e);
     }
     setPushLoading(false);
-  }
-
-  async function saveXClientId() {
-    if (!xClientId && !xClientSecret) return;
-    setXSaving(true);
-    const body: Record<string, string> = {};
-    if (xClientId) body.xClientId = xClientId;
-    if (xClientSecret) body.xClientSecret = xClientSecret;
-    const res = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    setXSaving(false);
-    if (res.ok) {
-      if (xClientId) {
-        setXClientId("");
-        setXHasClientId(true);
-      }
-      if (xClientSecret) {
-        setXClientSecret("");
-        setXHasClientSecret(true);
-      }
-      setToast("保存しました");
-    } else {
-      setToast("保存失敗");
-    }
-  }
-
-  async function disconnectX() {
-    setXSaving(true);
-    const res = await fetch("/api/x/disconnect", { method: "POST" });
-    setXSaving(false);
-    if (res.ok) {
-      setXConnected(false);
-      setToast("連携を解除しました");
-    } else {
-      setToast("解除失敗");
-    }
   }
 
   async function changePw() {
@@ -676,78 +622,6 @@ export default function SettingsPage() {
       {/* 連携タブ */}
       {activeTab === "integration" && (
         <section className="space-y-4">
-          <div className={cardCls} style={cardStyle}>
-            <div className="flex items-center justify-between">
-              <h2 className={sectionTitleCls}>X (Twitter) 連携</h2>
-              <span
-                className="shrink-0 rounded-full px-2 py-0.5 text-xs"
-                style={{
-                  background: xConnected ? "var(--accent-subtle)" : "transparent",
-                  color: xConnected ? "var(--accent)" : "var(--muted)",
-                  border: xConnected ? "none" : "1px solid var(--card-border)",
-                }}
-              >
-                {xConnected ? "連携中" : "未連携"}
-              </span>
-            </div>
-            <div>
-              <label className={labelCls}>X Client ID</label>
-              <input
-                type="text"
-                placeholder={xHasClientId ? "(設定済み) 変更する場合のみ入力" : "未設定"}
-                value={xClientId}
-                onChange={(e) => setXClientId(e.target.value)}
-                className={inputCls}
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>
-                X Client Secret (Confidential clientのみ)
-              </label>
-              <input
-                type="password"
-                placeholder={xHasClientSecret ? "(設定済み) 変更する場合のみ入力" : "Public clientなら未入力でOK"}
-                value={xClientSecret}
-                onChange={(e) => setXClientSecret(e.target.value)}
-                className={inputCls}
-                style={inputStyle}
-              />
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {xConnected ? (
-                <button
-                  onClick={disconnectX}
-                  disabled={xSaving}
-                  className="rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
-                  style={{ background: "var(--bg)", border: "1px solid var(--card-border)" }}
-                >
-                  連携解除
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    if (!xHasClientId) return;
-                    window.location.href = "/api/x/auth";
-                  }}
-                  disabled={!xHasClientId}
-                  className="rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
-                  style={{ background: "var(--bg)", border: "1px solid var(--card-border)" }}
-                >
-                  Xと連携する
-                </button>
-              )}
-              <button
-                onClick={saveXClientId}
-                disabled={xSaving || (!xClientId && !xClientSecret)}
-                className={primaryBtnCls}
-                style={primaryBtnStyle}
-              >
-                {xSaving ? "保存中..." : "保存"}
-              </button>
-            </div>
-          </div>
-
           <div className={cardCls} style={cardStyle}>
             <h2 className={sectionTitleCls}>OPML</h2>
             <p className="text-sm" style={{ color: "var(--muted)" }}>

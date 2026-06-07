@@ -5,7 +5,7 @@ export interface BuildArticlesParamsInput {
   category?: string | null;
   search?: string;
   readFilter?: ReadFilter;
-  view?: "feeds" | "likes" | "starred";
+  view?: "feeds" | "starred";
   cursor?: string | null;
 }
 

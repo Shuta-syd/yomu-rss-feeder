@@ -1,13 +1,12 @@
 # Yomu
 
-AI搭載のセルフホスト型RSSリーダー。Gemini / OpenAI / Anthropic でフィード記事の要約・翻訳を生成し、Xのいいねも横断して管理できる。
+AI搭載のセルフホスト型RSSリーダー。Gemini / OpenAI / Anthropic でフィード記事の要約・翻訳を生成できる。
 
 ## 特徴
 
 - **AI要約・翻訳** — 2段階処理 (自動要約 + 詳細翻訳)、ストリーミング表示対応
 - **マルチLLM** — Gemini / OpenAI (GPT-4o系) / Anthropic (Claude) を混在運用可能
 - **全文取得** — RSSが抜粋のみの場合、Readabilityで元記事から全文抽出
-- **Xいいね分析** — OAuth 2.0 PKCE連携、いいね履歴からAIがトレンド分析
 - **OPML対応** — インポート/エクスポート
 - **PWA** — ホーム画面追加、Web Pushで新着通知
 - **認証** — UID (10桁数字) + パスワード、セッションcookie
@@ -20,7 +19,7 @@ AI搭載のセルフホスト型RSSリーダー。Gemini / OpenAI / Anthropic �
 - SQLite (WAL) + Drizzle ORM + FTS5全文検索
 - Tailwind CSS 4 + next-themes
 - node-cron (5分tick) で自動取得
-- Vitest (49テスト)
+- Vitest (97テスト)
 
 ## 起動
 
@@ -53,7 +52,9 @@ VAPID_PUBLIC_KEY=<Web Push用>    # make vapid-keys で生成
 VAPID_PRIVATE_KEY=<Web Push用>
 ```
 
-APIキー (Gemini / OpenAI / Anthropic / X Client ID) は初回セットアップ後、設定画面で登録する。AES-256-GCMで暗号化保存される。
+APIキー (Gemini / OpenAI / Anthropic) は初回セットアップ後、設定画面で登録する。AES-256-GCMで暗号化保存される。
+
+ローカルネットワーク上のフィードURLを取得したい場合のみ、`ALLOW_PRIVATE_FEED_URLS=true` を設定する。未設定時はSSRF対策として private / loopback / link-local 宛のURLを拒否する。
 
 ## 主要ディレクトリ
 
@@ -62,13 +63,11 @@ src/
 ├── app/                   # Next.js App Router
 │   ├── api/               # REST API
 │   ├── feeds/             # メインUI
-│   ├── settings/          # 設定画面 (タブ式)
-│   └── x/                 # Xいいね分析画面
+│   └── settings/          # 設定画面 (タブ式)
 ├── components/            # UIコンポーネント
 └── lib/
     ├── llm/               # LLMプロバイダ抽象化 (gemini/openai/anthropic)
     ├── rss/               # フィード取得・同期・OPML
-    ├── x/                 # X OAuth・いいね取得
     ├── db/                # Drizzle スキーマ
     └── auth.ts            # UID + パスワード認証
 ```

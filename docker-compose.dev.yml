@@ -24,6 +24,7 @@ services:
       POWERLEVEL9K_DISABLE_GITSTATUS: "true"
       COREPACK_ENABLE_AUTO_PIN: "0"
       ENCRYPTION_KEY: 69fcf323e4cc07ac16d841253473327e421eb4d4042b1726ca47e4ac9a5c2817
+      ALLOW_PRIVATE_FEED_URLS: ${ALLOW_PRIVATE_FEED_URLS:-}
     working_dir: /app
     command: sleep infinity
 

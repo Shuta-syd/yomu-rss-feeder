@@ -1,12 +1,9 @@
 import cron from "node-cron";
 import { syncAllFeeds } from "./rss/sync";
 import { getPendingStage1Ids, processStage1ForArticles } from "./llm/stage1";
-import { isXConnected } from "./x/auth";
-import { fetchAndStoreLikes } from "./x/likes";
 import { initVapid, sendPushToAll } from "./push";
 
 const TICK = "*/5 * * * *";
-const X_LIKES_DAILY = "0 3 * * *";
 
 let started = false;
 
@@ -51,14 +48,4 @@ export function initCron(): void {
     }
   });
 
-  // Xいいね日次取得 (毎日3時)
-  cron.schedule(X_LIKES_DAILY, async () => {
-    if (!isXConnected()) return;
-    try {
-      const stored = await fetchAndStoreLikes();
-      console.log(`[yomu] x-likes daily: stored ${stored} new likes`);
-    } catch (e) {
-      console.error("[yomu] x-likes daily failed", e);
-    }
-  });
 }

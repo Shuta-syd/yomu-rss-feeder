@@ -6,6 +6,7 @@ import { articles, feeds } from "../db/schema";
 import { sanitizeHtml, htmlToPlain } from "../sanitize";
 import { computeDedupHash } from "./dedup";
 import { fetchFullContent } from "./fullcontent";
+import { fetchSafeHttpUrl } from "../url-safety";
 
 const parser = new Parser({
   timeout: 30_000,
@@ -13,6 +14,29 @@ const parser = new Parser({
     "User-Agent": "yomu-rss-reader/1.0 (+https://github.com/yomu)",
   },
 });
+const MAX_FEED_BYTES = 5 * 1024 * 1024;
+
+async function parseFeedUrl(url: string) {
+  const { response } = await fetchSafeHttpUrl(url, {
+    headers: {
+      "User-Agent": "yomu-rss-reader/1.0 (+https://github.com/yomu)",
+      Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+    },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) {
+    throw new Error(`Feed fetch failed: ${response.status}`);
+  }
+  const contentLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_FEED_BYTES) {
+    throw new Error("Feed response is too large");
+  }
+  const body = await response.arrayBuffer();
+  if (body.byteLength > MAX_FEED_BYTES) {
+    throw new Error("Feed response is too large");
+  }
+  return parser.parseString(new TextDecoder("utf-8", { fatal: false }).decode(body));
+}
 
 export interface FetchResult {
   feedId: string;
@@ -29,7 +53,7 @@ export interface ParseValidation {
 }
 
 export async function validateFeedUrl(url: string): Promise<ParseValidation> {
-  const parsed = await parser.parseURL(url);
+  const parsed = await parseFeedUrl(url);
   return {
     title: parsed.title?.trim() || url,
     siteUrl: parsed.link?.trim() || null,
@@ -99,7 +123,7 @@ export async function fetchFeed(feedId: string, url: string): Promise<FetchResul
   const aiEnabled = feedRow?.aiEnabled ?? true;
   let parsed;
   try {
-    parsed = await parser.parseURL(url);
+    parsed = await parseFeedUrl(url);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     db.update(feeds)

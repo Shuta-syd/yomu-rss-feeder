@@ -1,6 +1,7 @@
 import { JSDOM, VirtualConsole } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { sanitizeHtml, htmlToPlain } from "../sanitize";
+import { fetchSafeHttpUrl } from "../url-safety";
 
 const silentConsole = new VirtualConsole();
 silentConsole.on("error", () => {});
@@ -46,13 +47,12 @@ export async function fetchFullContent(
   url: string,
 ): Promise<{ contentHtml: string; contentPlain: string; thumbnailUrl: string | null } | null> {
   try {
-    const res = await fetch(url, {
+    const { response: res, url: finalUrl } = await fetchSafeHttpUrl(url, {
       headers: {
         "User-Agent": "yomu-rss-reader/1.0 (+https://github.com/yomu)",
         Accept: "text/html",
       },
       signal: AbortSignal.timeout(FETCH_TIMEOUT),
-      redirect: "follow",
     });
 
     if (!res.ok) return null;
@@ -64,7 +64,7 @@ export async function fetchFullContent(
     if (buf.byteLength > MAX_HTML_SIZE) return null;
     const html = decodeHtml(buf, contentType);
 
-    const dom = new JSDOM(html, { url, virtualConsole: silentConsole });
+    const dom = new JSDOM(html, { url: finalUrl, virtualConsole: silentConsole });
     const reader = new Readability(dom.window.document);
     const article = reader.parse();
     if (!article?.content) return null;

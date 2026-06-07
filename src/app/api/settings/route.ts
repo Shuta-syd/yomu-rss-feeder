@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
-import { getSettings, updateSettings } from "@/lib/settings";
+import { getSettings, InvalidSettingsError, updateSettings } from "@/lib/settings";
 
 export async function GET() {
   try {
@@ -23,8 +23,6 @@ const bodySchema = z.object({
   geminiModelStage2: z.string().optional(),
   theme: z.enum(["light", "dark", "system"]).optional(),
   autoMarkAsRead: z.boolean().optional(),
-  xClientId: z.string().optional(),
-  xClientSecret: z.string().nullable().optional(),
 });
 
 export async function PUT(req: NextRequest) {
@@ -40,5 +38,12 @@ export async function PUT(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
-  return NextResponse.json(updateSettings(parsed.data));
+  try {
+    return NextResponse.json(updateSettings(parsed.data));
+  } catch (e) {
+    if (e instanceof InvalidSettingsError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    throw e;
+  }
 }
