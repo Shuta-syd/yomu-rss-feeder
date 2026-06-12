@@ -9,6 +9,7 @@ import { ArticleList } from "@/components/articles/ArticleList";
 import { ArticleDetail } from "@/components/articles/ArticleDetail";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { buildArticlesParams, type ReadFilter } from "@/lib/articles-params";
+import { mergeArticles, appendArticles } from "@/lib/merge-articles";
 import { subscribeUpdates } from "@/lib/article-note-saver";
 import type { FeedWithUnread } from "@/types/feed";
 import type { ArticleDTO } from "@/types/article";
@@ -132,7 +133,7 @@ export default function FeedsPage() {
       if (res.ok) {
         const data = await res.json();
         if (ctrl.signal.aborted) return;
-        setArticles((prev) => [...prev, ...data.articles]);
+        setArticles((prev) => appendArticles(prev, data.articles));
         setNextCursor(data.nextCursor ?? null);
       }
     } catch (e) {
@@ -141,6 +142,58 @@ export default function FeedsPage() {
       setLoadingMore(false);
     }
   }, [nextCursor, loadingMore, selectedFeedId, selectedCategory, search, view, readFilter, router]);
+
+  // バックグラウンド更新: リストを丸ごと差し替えず ID マージで更新する。
+  // 行コンポーネントの再マウント (サムネイル再読み込み)・ページネーション破壊・
+  // スクロール位置の喪失を防ぐ。
+  const articlesQueryKey = buildArticlesParams({
+    feedId: selectedFeedId,
+    category: selectedCategory,
+    search,
+    view,
+    readFilter,
+  }).toString();
+  const queryKeyRef = useRef(articlesQueryKey);
+  const articlesEmptyRef = useRef(true);
+  const refreshingRef = useRef(false);
+
+  useEffect(() => {
+    queryKeyRef.current = articlesQueryKey;
+  });
+  useEffect(() => {
+    articlesEmptyRef.current = articles.length === 0;
+  }, [articles]);
+
+  const refreshArticles = useCallback(async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    try {
+      const params = buildArticlesParams({
+        feedId: selectedFeedId,
+        category: selectedCategory,
+        search,
+        view,
+        readFilter,
+      });
+      const startKey = params.toString();
+      const res = await fetch(`/api/articles?${params}`);
+      if (res.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) return;
+      const data = await res.json();
+      // 取得中にフィルタ/フィードが切り替わっていたら破棄
+      if (queryKeyRef.current !== startKey) return;
+      const wasEmpty = articlesEmptyRef.current;
+      setArticles((prev) => mergeArticles(prev, data.articles));
+      if (wasEmpty) setNextCursor(data.nextCursor ?? null);
+    } catch {
+      // バックグラウンド更新の失敗は次回ポーリングに任せる
+    } finally {
+      refreshingRef.current = false;
+    }
+  }, [selectedFeedId, selectedCategory, search, view, readFilter, router]);
 
   useEffect(() => {
     loadFeeds();
@@ -194,13 +247,13 @@ export default function FeedsPage() {
     const active = (aiStatus?.pending ?? 0) + (aiStatus?.processing ?? 0) > 0;
     const interval = setInterval(() => {
       poll();
-      if (active) loadInitial();
+      if (active) refreshArticles();
     }, active ? 5000 : 30000);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [aiStatus?.pending, aiStatus?.processing, loadInitial]);
+  }, [aiStatus?.pending, aiStatus?.processing, refreshArticles]);
 
   async function markAllRead() {
     setMarkingRead(true);
@@ -225,7 +278,7 @@ export default function FeedsPage() {
     setSyncing(false);
     if (res.ok) {
       loadFeeds();
-      loadInitial();
+      refreshArticles();
     }
   }
 
@@ -357,17 +410,26 @@ export default function FeedsPage() {
             ⚙
           </a>
         </div>
-        {aiStatus && aiStatus.processing > 0 && aiStatus.currentFeedTitle && (
+        {/* バッチ処理中はバナーを出し続け、ポーリングごとの出没でレイアウトが上下しないようにする */}
+        {aiStatus && (aiStatus.processing > 0 || aiStatus.pending > 0) && (
           <div
             className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
             style={{ borderColor: "var(--card-border)", background: "var(--ai-bg)", color: "var(--muted)" }}
           >
             <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full" style={{ background: "var(--accent)" }} />
-            <span className="shrink-0" style={{ color: "var(--accent)" }}>翻訳中</span>
-            <span className="min-w-0 flex-1 truncate font-medium" title={`${aiStatus.currentFeedTitle} / ${aiStatus.currentTitle ?? ""}`}>
-              {aiStatus.currentFeedTitle}
-              {aiStatus.currentTitle && <span className="ml-1 opacity-60">― {aiStatus.currentTitle}</span>}
-            </span>
+            {aiStatus.processing > 0 && aiStatus.currentFeedTitle ? (
+              <>
+                <span className="shrink-0" style={{ color: "var(--accent)" }}>翻訳中</span>
+                <span className="min-w-0 flex-1 truncate font-medium" title={`${aiStatus.currentFeedTitle} / ${aiStatus.currentTitle ?? ""}`}>
+                  {aiStatus.currentFeedTitle}
+                  {aiStatus.currentTitle && <span className="ml-1 opacity-60">― {aiStatus.currentTitle}</span>}
+                </span>
+              </>
+            ) : (
+              <span className="min-w-0 flex-1 truncate" style={{ color: "var(--accent)" }}>
+                AI処理待ち {aiStatus.pending}件
+              </span>
+            )}
           </div>
         )}
         <div className="flex-1 overflow-hidden">
@@ -378,6 +440,7 @@ export default function FeedsPage() {
             onLoadMore={loadMore}
             hasMore={nextCursor !== null}
             loadingMore={loadingMore}
+            resetKey={articlesQueryKey}
           />
         </div>
       </section>
