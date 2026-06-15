@@ -56,6 +56,20 @@ APIキー (Gemini / OpenAI / Anthropic) は初回セットアップ後、設定�
 
 ローカルネットワーク上のフィードURLを取得したい場合のみ、`ALLOW_PRIVATE_FEED_URLS=true` を設定する。未設定時はSSRF対策として private / loopback / link-local 宛のURLを拒否する。
 
+### RSS同期の運用設定
+
+障害時に自動同期を止める場合は `YOMU_AUTO_SYNC_ENABLED=false` を設定して再起動する。
+
+```bash
+YOMU_AUTO_SYNC_ENABLED=true
+YOMU_SYNC_MAX_DURATION_MS=480000
+YOMU_SYNC_LOCK_TIMEOUT_MS=600000
+YOMU_MAX_FEED_ITEMS=200
+YOMU_MAX_FULL_CONTENT_FETCHES_PER_FEED=20
+YOMU_MAX_ITEM_HTML_CHARS=200000
+YOMU_STAGE1_PENDING_LIMIT=50
+```
+
 ## 主要ディレクトリ
 
 ```

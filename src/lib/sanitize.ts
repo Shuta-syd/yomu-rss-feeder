@@ -71,6 +71,10 @@ export function sanitizeHtml(dirty: string): string {
 }
 
 export function htmlToPlain(html: string): string {
-  const doc = new JSDOM(`<!doctype html><body>${html}</body>`, { virtualConsole: silentConsole }).window.document;
-  return (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
+  const dom = new JSDOM(`<!doctype html><body>${html}</body>`, { virtualConsole: silentConsole });
+  try {
+    return (dom.window.document.body.textContent ?? "").replace(/\s+/g, " ").trim();
+  } finally {
+    dom.window.close();
+  }
 }

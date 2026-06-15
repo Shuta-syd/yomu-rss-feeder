@@ -2,17 +2,32 @@ import cron from "node-cron";
 import { syncAllFeeds } from "./rss/sync";
 import { getPendingStage1Ids, processStage1ForArticles } from "./llm/stage1";
 import { initVapid, sendPushToAll } from "./push";
+import { readBooleanEnv, readPositiveIntEnv } from "./env";
 
 const TICK = "*/5 * * * *";
+const AUTO_SYNC_ENABLED = readBooleanEnv("YOMU_AUTO_SYNC_ENABLED", true);
+const STAGE1_PENDING_LIMIT = readPositiveIntEnv("YOMU_STAGE1_PENDING_LIMIT", 50);
 
 let started = false;
+let tickRunning = false;
 
 export function initCron(): void {
   if (started) return;
   started = true;
   initVapid();
 
+  if (!AUTO_SYNC_ENABLED) {
+    console.log("[yomu] Cron scheduler disabled by YOMU_AUTO_SYNC_ENABLED=false.");
+    return;
+  }
+
   cron.schedule(TICK, async () => {
+    if (tickRunning) {
+      console.warn("[yomu] cron tick: previous tick still running, skipping");
+      return;
+    }
+
+    tickRunning = true;
     const startedAt = Date.now();
     try {
       const summary = await syncAllFeeds();
@@ -22,7 +37,7 @@ export function initCron(): void {
       }
 
       // pending状態の記事があればStage1処理を実行
-      const pendingIds = getPendingStage1Ids(500);
+      const pendingIds = getPendingStage1Ids(STAGE1_PENDING_LIMIT);
       if (pendingIds.length > 0) {
         try {
           await processStage1ForArticles(pendingIds);
@@ -45,6 +60,8 @@ export function initCron(): void {
       );
     } catch (e) {
       console.error("[yomu] cron tick failed", e);
+    } finally {
+      tickRunning = false;
     }
   });
 

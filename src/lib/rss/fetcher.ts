@@ -7,6 +7,8 @@ import { sanitizeHtml, htmlToPlain } from "../sanitize";
 import { computeDedupHash } from "./dedup";
 import { fetchFullContent } from "./fullcontent";
 import { fetchSafeHttpUrl } from "../url-safety";
+import { readPositiveIntEnv } from "../env";
+import { readResponseArrayBufferLimited } from "../http/read-limited";
 
 const parser = new Parser({
   timeout: 30_000,
@@ -15,6 +17,12 @@ const parser = new Parser({
   },
 });
 const MAX_FEED_BYTES = 5 * 1024 * 1024;
+const MAX_FEED_ITEMS = readPositiveIntEnv("YOMU_MAX_FEED_ITEMS", 200);
+const MAX_FULL_CONTENT_FETCHES_PER_FEED = readPositiveIntEnv(
+  "YOMU_MAX_FULL_CONTENT_FETCHES_PER_FEED",
+  20,
+);
+const MAX_ITEM_HTML_CHARS = readPositiveIntEnv("YOMU_MAX_ITEM_HTML_CHARS", 200_000);
 
 async function parseFeedUrl(url: string) {
   const { response } = await fetchSafeHttpUrl(url, {
@@ -27,14 +35,7 @@ async function parseFeedUrl(url: string) {
   if (!response.ok) {
     throw new Error(`Feed fetch failed: ${response.status}`);
   }
-  const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > MAX_FEED_BYTES) {
-    throw new Error("Feed response is too large");
-  }
-  const body = await response.arrayBuffer();
-  if (body.byteLength > MAX_FEED_BYTES) {
-    throw new Error("Feed response is too large");
-  }
+  const body = await readResponseArrayBufferLimited(response, MAX_FEED_BYTES);
   return parser.parseString(new TextDecoder("utf-8", { fatal: false }).decode(body));
 }
 
@@ -44,12 +45,20 @@ export interface FetchResult {
   error?: string;
   newArticles: number;
   newArticleIds: string[];
+  processedItems: number;
+  skippedExisting: number;
+  limited: boolean;
 }
 
 export interface ParseValidation {
   title: string;
   siteUrl: string | null;
   description: string | null;
+}
+
+export interface FetchFeedOptions {
+  maxItems?: number;
+  maxFullContentFetches?: number;
 }
 
 export async function validateFeedUrl(url: string): Promise<ParseValidation> {
@@ -118,9 +127,21 @@ function parsePublished(input: string | undefined): number | null {
 }
 
 export async function fetchFeed(feedId: string, url: string): Promise<FetchResult> {
+  return fetchFeedWithOptions(feedId, url);
+}
+
+export async function fetchFeedWithOptions(
+  feedId: string,
+  url: string,
+  options: FetchFeedOptions = {},
+): Promise<FetchResult> {
   const now = Date.now();
   const feedRow = db.select({ aiEnabled: feeds.aiEnabled }).from(feeds).where(eq(feeds.id, feedId)).get();
   const aiEnabled = feedRow?.aiEnabled ?? true;
+  const maxItems = options.maxItems ?? MAX_FEED_ITEMS;
+  const maxFullContentFetches =
+    options.maxFullContentFetches ?? MAX_FULL_CONTENT_FETCHES_PER_FEED;
+
   let parsed;
   try {
     parsed = await parseFeedUrl(url);
@@ -135,11 +156,32 @@ export async function fetchFeed(feedId: string, url: string): Promise<FetchResul
       })
       .where(eq(feeds.id, feedId))
       .run();
-    return { feedId, ok: false, error: message, newArticles: 0, newArticleIds: [] };
+    return {
+      feedId,
+      ok: false,
+      error: message,
+      newArticles: 0,
+      newArticleIds: [],
+      processedItems: 0,
+      skippedExisting: 0,
+      limited: false,
+    };
+  }
+
+  const sourceItems = parsed.items ?? [];
+  const items = sourceItems.slice(0, maxItems);
+  const limited = items.length < sourceItems.length;
+  if (limited) {
+    console.warn(
+      `[yomu] feed item limit applied feedId=${feedId} items=${sourceItems.length} max=${maxItems}`,
+    );
   }
 
   const newIds: string[] = [];
-  for (const item of parsed.items ?? []) {
+  let skippedExisting = 0;
+  let fullContentFetches = 0;
+
+  for (const item of items) {
     const dedupHash = computeDedupHash(feedId, {
       guid: item.guid,
       link: item.link,
@@ -147,17 +189,29 @@ export async function fetchFeed(feedId: string, url: string): Promise<FetchResul
       pubDate: item.pubDate,
     });
 
+    const existing = db
+      .select({ id: articles.id })
+      .from(articles)
+      .where(and(eq(articles.feedId, feedId), eq(articles.dedupHash, dedupHash)))
+      .get();
+    if (existing) {
+      skippedExisting++;
+      continue;
+    }
+
     const rawHtml =
       (item as { "content:encoded"?: string })["content:encoded"] ??
       item.content ??
       "";
-    let contentHtml = rawHtml ? sanitizeHtml(rawHtml) : null;
+    const boundedRawHtml = rawHtml.slice(0, MAX_ITEM_HTML_CHARS);
+    let contentHtml = boundedRawHtml ? sanitizeHtml(boundedRawHtml) : null;
     let contentPlain = contentHtml ? htmlToPlain(contentHtml) : null;
-    let thumbnailUrl = extractThumbnail(item, rawHtml) ?? null;
+    let thumbnailUrl = extractThumbnail(item, boundedRawHtml) ?? null;
 
     // RSS本文が短い場合、元記事からフルコンテンツ取得を試行
     const isShortContent = !contentPlain || contentPlain.length < 500;
-    if (isShortContent && item.link) {
+    if (isShortContent && item.link && fullContentFetches < maxFullContentFetches) {
+      fullContentFetches++;
       const full = await fetchFullContent(item.link);
       if (full) {
         contentHtml = full.contentHtml;
@@ -217,6 +271,9 @@ export async function fetchFeed(feedId: string, url: string): Promise<FetchResul
     ok: true,
     newArticles: newIds.length,
     newArticleIds: newIds,
+    processedItems: items.length,
+    skippedExisting,
+    limited,
   };
 }
 
@@ -227,6 +284,3 @@ export function shouldFetch(feed: {
   if (feed.lastFetchedAt == null) return true;
   return now - feed.lastFetchedAt >= feed.fetchIntervalMin * 60 * 1000;
 }
-
-// 未使用import警告回避
-void and;
