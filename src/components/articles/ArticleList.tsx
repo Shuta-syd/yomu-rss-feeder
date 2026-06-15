@@ -1,23 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { ArticleDTO } from "@/types/article";
 import { dateKey, formatDateHeader } from "@/lib/article-date";
 
-function Thumbnail({ src }: { src: string }) {
+const Thumbnail = memo(function Thumbnail({ src }: { src: string }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
   if (failed) return null;
   return (
     <img
       src={src}
       alt=""
       className="h-20 w-24 shrink-0 rounded object-cover md:h-24 md:w-32"
+      style={{ background: "var(--card)" }}
       loading="lazy"
+      decoding="async"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
     />
   );
-}
+});
 
 interface Props {
   articles: ArticleDTO[];

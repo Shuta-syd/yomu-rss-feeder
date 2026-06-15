@@ -240,7 +240,23 @@ export default function FeedsPage() {
         const res = await fetch("/api/ai/status");
         if (!res.ok || cancelled) return;
         const data = await res.json();
-        setAiStatus({ pending: data.pending, processing: data.processing, failed: data.failed, currentTitle: data.currentTitle, currentFeedTitle: data.currentFeedTitle });
+        const next = {
+          pending: data.pending,
+          processing: data.processing,
+          failed: data.failed,
+          currentTitle: data.currentTitle,
+          currentFeedTitle: data.currentFeedTitle,
+        };
+        setAiStatus((prev) => (
+          prev &&
+          prev.pending === next.pending &&
+          prev.processing === next.processing &&
+          prev.failed === next.failed &&
+          prev.currentTitle === next.currentTitle &&
+          prev.currentFeedTitle === next.currentFeedTitle
+            ? prev
+            : next
+        ));
       } catch {}
     }
     poll();

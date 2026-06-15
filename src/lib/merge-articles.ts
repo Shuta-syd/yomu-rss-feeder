@@ -11,12 +11,30 @@ export function mergeArticles<T extends { id: string; sortKey: number }>(
 ): T[] {
   if (current.length === 0) return [...fetched];
 
+  const currentById = new Map(current.map((a) => [a.id, a]));
+  const mergedFetched = fetched.map((article) => {
+    const existing = currentById.get(article.id);
+    return existing && shallowEqualArticle(existing, article) ? existing : article;
+  });
   const fetchedIds = new Set(fetched.map((a) => a.id));
   const tail = current.filter((a) => !fetchedIds.has(a.id));
 
-  return [...fetched, ...tail].sort(
+  return [...mergedFetched, ...tail].sort(
     (x, y) => y.sortKey - x.sortKey || (x.id < y.id ? 1 : x.id > y.id ? -1 : 0),
   );
+}
+
+function shallowEqualArticle<T extends { id: string; sortKey: number }>(a: T, b: T): boolean {
+  const aRecord = a as Record<string, unknown>;
+  const bRecord = b as Record<string, unknown>;
+  const aKeys = Object.keys(aRecord);
+  const bKeys = Object.keys(bRecord);
+  if (aKeys.length !== bKeys.length) return false;
+
+  for (const key of aKeys) {
+    if (aRecord[key] !== bRecord[key]) return false;
+  }
+  return true;
 }
 
 /**

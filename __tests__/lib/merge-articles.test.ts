@@ -21,6 +21,13 @@ describe("mergeArticles", () => {
     expect(mergeArticles(current, fetched)).toEqual([item("a", 100, "new")]);
   });
 
+  it("同一IDかつ同一内容なら current の参照を維持する", () => {
+    const currentItem = item("a", 100, "same");
+    const fetched = [item("a", 100, "same")];
+    const merged = mergeArticles([currentItem], fetched);
+    expect(merged[0]).toBe(currentItem);
+  });
+
   it("fetched に含まれない読み込み済みの古い記事を保持する", () => {
     const current = [item("c", 300), item("b", 200), item("a", 100)];
     const fetched = [item("c", 300), item("b", 200)];
