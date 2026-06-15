@@ -37,11 +37,16 @@ export default function FeedsPage() {
   const [autoMarkAsRead, setAutoMarkAsRead] = useState(true);
   const [slideDirection, setSlideDirection] = useState<"forward" | "back">("forward");
 
-  const viewOrder = { sidebar: 0, list: 1, detail: 2 } as const;
-  function goToMobileView(next: "sidebar" | "list" | "detail") {
-    setSlideDirection(viewOrder[next] > viewOrder[mobileView] ? "forward" : "back");
+  const mobileViewRef = useRef(mobileView);
+  useEffect(() => {
+    mobileViewRef.current = mobileView;
+  }, [mobileView]);
+
+  const goToMobileView = useCallback((next: "sidebar" | "list" | "detail") => {
+    const viewOrder = { sidebar: 0, list: 1, detail: 2 } as const;
+    setSlideDirection(viewOrder[next] > viewOrder[mobileViewRef.current] ? "forward" : "back");
     setMobileView(next);
-  }
+  }, []);
   const resizing = useRef(false);
 
   useEffect(() => {
@@ -303,7 +308,7 @@ export default function FeedsPage() {
     router.replace("/login");
   }
 
-  function handleSelect(a: ArticleDTO) {
+  const handleSelect = useCallback((a: ArticleDTO) => {
     setSelected(a);
     if (isMobile) goToMobileView("detail");
     if (autoMarkAsRead && !a.isRead) {
@@ -321,7 +326,12 @@ export default function FeedsPage() {
         }
       });
     }
-  }
+  }, [autoMarkAsRead, goToMobileView, isMobile, loadFeeds]);
+
+  const handleArticleChange = useCallback((a: ArticleDTO) => {
+    setSelected((cur) => (cur?.id === a.id ? a : cur));
+    setArticles((prev) => prev.map((x) => (x.id === a.id ? a : x)));
+  }, []);
 
   const showSidebar = !isMobile || mobileView === "sidebar";
   const showList = !isMobile || mobileView === "list";
@@ -495,10 +505,7 @@ export default function FeedsPage() {
           <ArticleDetail
             key={selected?.id ?? "empty"}
             article={selected}
-            onChange={(a) => {
-              setSelected((cur) => (cur?.id === a.id ? a : cur));
-              setArticles((prev) => prev.map((x) => (x.id === a.id ? a : x)));
-            }}
+            onChange={handleArticleChange}
           />
         </div>
       </section>

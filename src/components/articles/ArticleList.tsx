@@ -45,7 +45,7 @@ function formatDate(ms: number | null): string {
   return d.toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
 }
 
-export function ArticleList({ articles, selectedId, onSelect, onLoadMore, hasMore, loadingMore, resetKey }: Props) {
+export const ArticleList = memo(function ArticleList({ articles, selectedId, onSelect, onLoadMore, hasMore, loadingMore, resetKey }: Props) {
   const sentinelRef = useRef<HTMLLIElement>(null);
   const scrollRef = useRef<HTMLUListElement>(null);
   const firstId = articles[0]?.id ?? null;
@@ -175,4 +175,4 @@ export function ArticleList({ articles, selectedId, onSelect, onLoadMore, hasMor
       )}
     </ul>
   );
-}
+});

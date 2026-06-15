@@ -19,9 +19,11 @@ export function mergeArticles<T extends { id: string; sortKey: number }>(
   const fetchedIds = new Set(fetched.map((a) => a.id));
   const tail = current.filter((a) => !fetchedIds.has(a.id));
 
-  return [...mergedFetched, ...tail].sort(
+  const merged = [...mergedFetched, ...tail].sort(
     (x, y) => y.sortKey - x.sortKey || (x.id < y.id ? 1 : x.id > y.id ? -1 : 0),
   );
+
+  return sameArticleOrder(current, merged) ? (current as T[]) : merged;
 }
 
 function shallowEqualArticle<T extends { id: string; sortKey: number }>(a: T, b: T): boolean {
@@ -35,6 +37,10 @@ function shallowEqualArticle<T extends { id: string; sortKey: number }>(a: T, b:
     if (aRecord[key] !== bRecord[key]) return false;
   }
   return true;
+}
+
+function sameArticleOrder<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((article, index) => article === b[index]);
 }
 
 /**

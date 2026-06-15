@@ -28,6 +28,13 @@ describe("mergeArticles", () => {
     expect(merged[0]).toBe(currentItem);
   });
 
+  it("一覧全体が変わらない場合は配列参照も維持する", () => {
+    const current = [item("b", 200, "same"), item("a", 100, "same")];
+    const fetched = [item("b", 200, "same"), item("a", 100, "same")];
+    const merged = mergeArticles(current, fetched);
+    expect(merged).toBe(current);
+  });
+
   it("fetched に含まれない読み込み済みの古い記事を保持する", () => {
     const current = [item("c", 300), item("b", 200), item("a", 100)];
     const fetched = [item("c", 300), item("b", 200)];
