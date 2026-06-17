@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "build:scripts": "tsc -p tsconfig.scripts.json",
+    "build:scripts": "tsc -p tsconfig.scripts.json && node scripts/fix-esm-imports.mjs",
     "start": "node server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

@@ -80,8 +80,8 @@ COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/drizzle ./drizzle
 COPY --from=builder --chown=node:node /app/entrypoint.sh ./entrypoint.sh
 
-# better-sqlite3 ネイティブバイナリ (dist scripts で使用)
-COPY --from=deps --chown=node:node /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
+# worker / dist scripts で使用する本番依存
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 
 RUN mkdir -p /data && chown node:node /data && chmod +x ./entrypoint.sh
 VOLUME ["/data"]

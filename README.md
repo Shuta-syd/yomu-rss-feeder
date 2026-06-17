@@ -11,14 +11,14 @@ AI搭載のセルフホスト型RSSリーダー。Gemini / OpenAI / Anthropic �
 - **PWA** — ホーム画面追加、Web Pushで新着通知
 - **認証** — UID (10桁数字) + パスワード、セッションcookie
 - **UI** — 3カラムレイアウト、ライト/ダーク切替、記事ビュー幅のドラッグリサイズ
-- **セルフホスト** — Docker Composeで単一コンテナ運用
+- **セルフホスト** — Docker ComposeでWeb/worker分離運用
 
 ## 技術スタック
 
 - Next.js 16 (App Router) / React 19 / TypeScript 5.7
 - SQLite (WAL) + Drizzle ORM + FTS5全文検索
 - Tailwind CSS 4 + next-themes
-- node-cron (5分tick) で自動取得
+- node-cron (5分tick) のworkerで自動取得
 - Vitest (97テスト)
 
 ## 起動
@@ -58,7 +58,9 @@ APIキー (Gemini / OpenAI / Anthropic) は初回セットアップ後、設定�
 
 ### RSS同期の運用設定
 
-障害時に自動同期を止める場合は `YOMU_AUTO_SYNC_ENABLED=false` を設定して再起動する。
+本番Docker Composeでは、Web応答を担当する `app` とRSS同期/AI処理を担当する `worker` を分けて起動する。`app` 側では自動同期を起動せず、重いJSDOM解析やLLM処理でWeb応答が詰まるのを避ける。
+
+障害時に自動同期を止める場合は `YOMU_AUTO_SYNC_ENABLED=false` を設定して再起動する。この設定は `worker` にだけ適用され、Web UI/APIはそのまま起動する。
 
 ```bash
 YOMU_AUTO_SYNC_ENABLED=true

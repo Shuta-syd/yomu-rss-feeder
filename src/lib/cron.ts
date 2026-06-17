@@ -11,14 +11,14 @@ const STAGE1_PENDING_LIMIT = readPositiveIntEnv("YOMU_STAGE1_PENDING_LIMIT", 50)
 let started = false;
 let tickRunning = false;
 
-export function initCron(): void {
-  if (started) return;
+export function initCron(): boolean {
+  if (started) return false;
   started = true;
   initVapid();
 
   if (!AUTO_SYNC_ENABLED) {
     console.log("[yomu] Cron scheduler disabled by YOMU_AUTO_SYNC_ENABLED=false.");
-    return;
+    return false;
   }
 
   cron.schedule(TICK, async () => {
@@ -65,4 +65,5 @@ export function initCron(): void {
     }
   });
 
+  return true;
 }

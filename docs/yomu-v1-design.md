@@ -70,7 +70,7 @@ RSSリーダーとXいいね分析を統合する価値は「横断分析」に�
 yomu/
 ├── docker-compose.yml
 ├── Dockerfile
-├── entrypoint.sh                   # 起動シーケンス（migration → stale reset → server）
+├── entrypoint.sh                   # 起動シーケンス（migration → stale reset → server/worker）
 ├── drizzle.config.ts
 ├── next.config.ts
 ├── package.json
@@ -1119,7 +1119,7 @@ volumes:
   yomu-data:
 ```
 
-Redis不要。workerプロセス不要。Next.jsの単一プロセスで完結。
+Redis不要。RSS同期/AI処理は同一イメージのworkerプロセスに分離し、Web応答と重いバッチ処理を別Nodeプロセスで実行する。
 
 ### 9.2 Dockerfile
 
@@ -1262,15 +1262,19 @@ COPY --from=builder /app/entrypoint.sh ./
 RUN chmod +x ./entrypoint.sh
 ```
 
-cron の初期化は Next.js の `instrumentation.ts`（App Router の bootstrap hook）で一度だけ行う。
+cron の初期化は worker script で一度だけ行う。本番Webプロセスでは `YOMU_AUTO_SYNC_ENABLED=false` を設定し、Next.js の `instrumentation.ts` からはcronを起動しない。
 
 ```typescript
 // src/instrumentation.ts
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { initCron } = await import("./lib/cron");
-    initCron();
-    console.log("[yomu] Cron scheduler initialized.");
+    const started = initCron();
+    console.log(
+      started
+        ? "[yomu] Cron scheduler initialized."
+        : "[yomu] Cron scheduler not started.",
+    );
   }
 }
 ```
