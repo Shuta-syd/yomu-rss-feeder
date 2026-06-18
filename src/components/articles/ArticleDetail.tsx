@@ -30,18 +30,22 @@ interface RelatedLink {
   title: string;
 }
 
+// フォントサイズは --article-font-size を基準に比例拡大する。
+// 本文(p/li)は 1em = 基準サイズ、見出し・コードは em 比で連動させる
+// (level 3=15px のとき従来の 15/18/20/16/14px とほぼ一致)。
 const ARTICLE_PROSE_CLASS = `prose prose-neutral max-w-none dark:prose-invert
   prose-headings:font-bold prose-headings:tracking-tight
-  prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
-  prose-p:leading-7 prose-p:text-[15px]
+  prose-h1:text-[1.33em] prose-h2:text-[1.2em] prose-h3:text-[1.07em]
+  prose-p:leading-[1.8]
   prose-a:underline prose-a:underline-offset-2
   prose-img:rounded-lg prose-img:shadow-sm
-  prose-pre:rounded-lg prose-pre:text-sm
-  prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
+  prose-pre:rounded-lg prose-pre:text-[0.9em]
+  prose-code:text-[0.9em] prose-code:before:content-none prose-code:after:content-none
   prose-blockquote:border-l-2 prose-blockquote:not-italic
-  prose-li:leading-7`;
+  prose-li:leading-[1.8]`;
 
 const ARTICLE_PROSE_STYLE: CSSProperties = {
+  fontSize: "var(--article-font-size, 15px)",
   "--tw-prose-body": "var(--fg)",
   "--tw-prose-headings": "var(--fg)",
   "--tw-prose-links": "var(--accent)",

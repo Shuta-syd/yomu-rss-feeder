@@ -3,6 +3,9 @@
 
 :root {
   color-scheme: light;
+  /* 記事本文の基準フォントサイズ。layout.tsx のブートスクリプトと
+     ArticleFontSizeControl が localStorage の値で上書きする。 */
+  --article-font-size: 15px;
   --bg: #ffffff;
   --fg: #18181b;
   --card: #f4f4f5;

@@ -9,6 +9,7 @@ import { ArticleList } from "@/components/articles/ArticleList";
 import { ArticleDetail } from "@/components/articles/ArticleDetail";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { buildArticlesParams, type ReadFilter } from "@/lib/articles-params";
+import { parseFeedsUrl, buildFeedsUrl } from "@/lib/feeds-url-state";
 import { mergeArticles, appendArticles } from "@/lib/merge-articles";
 import { subscribeUpdates } from "@/lib/article-note-saver";
 import type { FeedWithUnread } from "@/types/feed";
@@ -36,6 +37,8 @@ export default function FeedsPage() {
   const [markingRead, setMarkingRead] = useState(false);
   const [autoMarkAsRead, setAutoMarkAsRead] = useState(true);
   const [slideDirection, setSlideDirection] = useState<"forward" | "back">("forward");
+  // URL からの初期状態復元が済むまで loadInitial を待たせ、既定→復元の二重 fetch を防ぐ
+  const [restored, setRestored] = useState(false);
 
   const mobileViewRef = useRef(mobileView);
   useEffect(() => {
@@ -235,8 +238,57 @@ export default function FeedsPage() {
   }, []);
 
   useEffect(() => {
+    if (!restored) return;
     loadInitial();
-  }, [loadInitial]);
+  }, [loadInitial, restored]);
+
+  // マウント時に一度だけ URL を読み、閲覧状態を復元する。
+  // ハイドレーション不整合を避けるため useState 初期値ではなく effect で行う。
+  useEffect(() => {
+    const s = parseFeedsUrl(window.location.search);
+    if (s.feedId) setSelectedFeedId(s.feedId);
+    if (s.category) setSelectedCategory(s.category);
+    if (s.view === "starred") setView("starred");
+    if (s.readFilter !== "all") setReadFilter(s.readFilter);
+    if (s.search) setSearch(s.search);
+    if (s.articleId) {
+      fetch(`/api/articles/${s.articleId}`)
+        .then((r) => {
+          if (r.status === 401) {
+            router.replace("/login");
+            return null;
+          }
+          return r.ok ? r.json() : null;
+        })
+        .then((a) => {
+          if (!a) return;
+          setSelected(a);
+          if (window.matchMedia("(max-width: 767px)").matches) {
+            setMobileView("detail");
+          }
+        })
+        .catch(() => {});
+    }
+    setRestored(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 閲覧状態を URL に書き戻す。history.replaceState なので履歴は増やさず、
+  // Next のナビゲーション/再 fetch も起こさない。
+  useEffect(() => {
+    if (!restored) return;
+    const url =
+      window.location.pathname +
+      buildFeedsUrl({
+        articleId: selected?.id ?? null,
+        feedId: selectedFeedId,
+        category: selectedCategory,
+        view,
+        readFilter,
+        search,
+      });
+    window.history.replaceState(null, "", url);
+  }, [restored, selected?.id, selectedFeedId, selectedCategory, view, readFilter, search]);
 
   useEffect(() => {
     let cancelled = false;

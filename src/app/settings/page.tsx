@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { ArticleFontSizeControl } from "@/components/layout/ArticleFontSizeControl";
 import { FeedIcon } from "@/components/feeds/FeedIcon";
 
 type ProviderType = "gemini" | "openai" | "anthropic";
@@ -665,6 +666,14 @@ export default function SettingsPage() {
               </span>
               <ThemeToggle />
             </div>
+          </div>
+
+          <div className={cardCls} style={cardStyle}>
+            <h2 className={sectionTitleCls}>記事の文字サイズ</h2>
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              記事本文の表示サイズを変更します。この端末のみに保存されます。
+            </p>
+            <ArticleFontSizeControl />
           </div>
 
           <div className={cardCls} style={cardStyle}>

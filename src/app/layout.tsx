@@ -32,7 +32,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var s=localStorage.getItem("theme");var d=s==="dark"||(!s&&matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.classList.add("dark");}catch(e){}})();`,
+            __html: `(function(){try{var s=localStorage.getItem("theme");var d=s==="dark"||(!s&&matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.classList.add("dark");var f=localStorage.getItem("articleFontSize");var px={"1":13,"2":14,"3":15,"4":18,"5":21}[f]||15;document.documentElement.style.setProperty("--article-font-size",px+"px");}catch(e){}})();`,
           }}
         />
       </head>
