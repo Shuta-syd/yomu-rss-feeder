@@ -23,6 +23,7 @@ function humanizeError(raw: string): string {
 interface Props {
   article: ArticleDTO | null;
   onChange: (a: ArticleDTO) => void;
+  readOnly?: boolean;
 }
 
 interface RelatedLink {
@@ -53,7 +54,7 @@ const ARTICLE_PROSE_STYLE: CSSProperties = {
   "--tw-prose-quote-borders": "var(--accent)",
 } as CSSProperties;
 
-export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: Props) {
+export const ArticleDetail = memo(function ArticleDetail({ article, onChange, readOnly = false }: Props) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [streamText, setStreamText] = useState("");
@@ -82,12 +83,12 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
   }, [articleId, articleNote]);
 
   useEffect(() => {
-    if (!articleId) return;
+    if (!articleId || readOnly) return;
     return subscribeStatus(articleId, articleNote, setNoteStatus);
-  }, [articleId, articleNote]);
+  }, [articleId, articleNote, readOnly]);
 
   const runStage1 = useCallback(async () => {
-    if (!article) return;
+    if (!article || readOnly) return;
     setStage1Loading(true);
     try {
       const res = await fetch(`/api/articles/${article.id}/stage1`, { method: "POST" });
@@ -96,7 +97,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
     } finally {
       setStage1Loading(false);
     }
-  }, [article, onChange]);
+  }, [article, onChange, readOnly]);
 
   useEffect(() => {
     setAiError(null);
@@ -107,7 +108,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
   }, [articleId, articleTranslation]);
 
   const runAi = useCallback(async () => {
-    if (!article) return;
+    if (!article || readOnly) return;
     setAiLoading(true);
     setAiError(null);
     setStreamText("");
@@ -167,7 +168,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
     } finally {
       setAiLoading(false);
     }
-  }, [article, onChange]);
+  }, [article, onChange, readOnly]);
 
   if (!article) {
     return (
@@ -181,7 +182,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
   }
 
   async function toggle(field: "isRead" | "isStarred", value: boolean) {
-    if (!article) return;
+    if (!article || readOnly) return;
     const res = await fetch(`/api/articles/${article.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -232,45 +233,47 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
               </a>
             </div>
           </div>
-          <div className="flex shrink-0 gap-1.5 overflow-x-auto">
-            <button
-              onClick={runStage1}
-              disabled={stage1Loading || article.aiStage1Status === "processing"}
-              className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors disabled:opacity-50"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-              title="タイトル翻訳・要約・タグを再生成"
-            >
-              {stage1Loading || article.aiStage1Status === "processing" ? "翻訳中..." : "🌐 翻訳"}
-            </button>
-            <button
-              onClick={() => toggle("isStarred", !article.isStarred)}
-              className="shrink-0 rounded-md px-2.5 py-1.5 text-sm transition-colors"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-              title={article.isStarred ? "スター解除" : "スター"}
-            >
-              {article.isStarred ? "★" : "☆"}
-            </button>
-            <button
-              onClick={() => setNoteOpen((v) => !v)}
-              className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
-              style={{
-                background: note ? "var(--accent-subtle)" : "var(--card)",
-                color: note ? "var(--accent)" : "inherit",
-                border: "1px solid var(--card-border)",
-              }}
-              title={note ? "メモあり" : "メモを追加"}
-              aria-expanded={noteOpen}
-            >
-              📝 {note ? "" : "メモ"}
-            </button>
-            <button
-              onClick={() => toggle("isRead", !article.isRead)}
-              className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-            >
-              {article.isRead ? "未読に戻す" : "既読にする"}
-            </button>
-          </div>
+          {!readOnly && (
+            <div className="flex shrink-0 gap-1.5 overflow-x-auto">
+              <button
+                onClick={runStage1}
+                disabled={stage1Loading || article.aiStage1Status === "processing"}
+                className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors disabled:opacity-50"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                title="タイトル翻訳・要約・タグを再生成"
+              >
+                {stage1Loading || article.aiStage1Status === "processing" ? "翻訳中..." : "🌐 翻訳"}
+              </button>
+              <button
+                onClick={() => toggle("isStarred", !article.isStarred)}
+                className="shrink-0 rounded-md px-2.5 py-1.5 text-sm transition-colors"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+                title={article.isStarred ? "スター解除" : "スター"}
+              >
+                {article.isStarred ? "★" : "☆"}
+              </button>
+              <button
+                onClick={() => setNoteOpen((v) => !v)}
+                className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
+                style={{
+                  background: note ? "var(--accent-subtle)" : "var(--card)",
+                  color: note ? "var(--accent)" : "inherit",
+                  border: "1px solid var(--card-border)",
+                }}
+                title={note ? "メモあり" : "メモを追加"}
+                aria-expanded={noteOpen}
+              >
+                📝 {note ? "" : "メモ"}
+              </button>
+              <button
+                onClick={() => toggle("isRead", !article.isRead)}
+                className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              >
+                {article.isRead ? "未読に戻す" : "既読にする"}
+              </button>
+            </div>
+          )}
         </div>
         {tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -290,7 +293,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
             {article.aiSummaryShort}
           </p>
         )}
-        {noteOpen && (
+        {!readOnly && noteOpen && (
           <div className="mt-3">
             <textarea
               value={note}
@@ -318,35 +321,36 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
 
       <div className="mx-auto max-w-3xl px-4 py-5 md:px-6 md:py-6">
         {/* AI 要約・翻訳パネル */}
-        <section
-          className="mb-8 rounded-lg border p-5"
-          style={{ background: "var(--ai-bg)", borderColor: "var(--ai-border)" }}
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-bold" style={{ color: "var(--accent)" }}>
-              <span>AI 要約・翻訳</span>
-              {aiLoading && (
-                <span
-                  className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-t-transparent"
-                  style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
-                />
-              )}
-            </h2>
-            <button
-              onClick={runAi}
-              disabled={aiLoading || article.aiStage2Status === "processing"}
-              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
-              style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
-            >
-              {aiLoading && (
-                <span
-                  className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-t-transparent"
-                  style={{ borderColor: "var(--accent-fg)", borderTopColor: "transparent" }}
-                />
-              )}
-              <span>{aiLoading ? "処理中" : article.aiSummaryFull ? "再生成" : "生成"}</span>
-            </button>
-          </div>
+        {!readOnly && (
+          <section
+            className="mb-8 rounded-lg border p-5"
+            style={{ background: "var(--ai-bg)", borderColor: "var(--ai-border)" }}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-sm font-bold" style={{ color: "var(--accent)" }}>
+                <span>AI 要約・翻訳</span>
+                {aiLoading && (
+                  <span
+                    className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-t-transparent"
+                    style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
+                  />
+                )}
+              </h2>
+              <button
+                onClick={runAi}
+                disabled={aiLoading || article.aiStage2Status === "processing"}
+                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+              >
+                {aiLoading && (
+                  <span
+                    className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-t-transparent"
+                    style={{ borderColor: "var(--accent-fg)", borderTopColor: "transparent" }}
+                  />
+                )}
+                <span>{aiLoading ? "処理中" : article.aiSummaryFull ? "再生成" : "生成"}</span>
+              </button>
+            </div>
 
           {(aiError || (!aiLoading && article.aiStage2Status === "failed" && article.aiStage2Error)) && (
             <p className="fade-in-up mb-2 text-sm" style={{ color: "#f87171" }}>
@@ -426,6 +430,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
             </p>
           )}
         </section>
+        )}
 
         {/* 記事本文 */}
         {article.contentHtml ? (

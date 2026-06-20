@@ -14,6 +14,57 @@ import { mergeArticles, appendArticles } from "@/lib/merge-articles";
 import { subscribeUpdates } from "@/lib/article-note-saver";
 import type { FeedWithUnread } from "@/types/feed";
 import type { ArticleDTO } from "@/types/article";
+import type { ReaderPageDTO } from "@/types/reader";
+
+const READER_SHORTCUTS = [
+  { label: "YC RFS", url: "https://www.ycombinator.com/rfs" },
+  { label: "Launch YC", url: "https://www.ycombinator.com/launches" },
+  { label: "IdeaBrowser", url: "https://www.ideabrowser.com/" },
+  { label: "THE BRIDGE", url: "https://thebridge.jp/" },
+  { label: "Product Hunt", url: "https://www.producthunt.com/" },
+  { label: "Exploding Topics", url: "https://explodingtopics.com/" },
+  { label: "Indie Hackers", url: "https://www.indiehackers.com/" },
+];
+
+function parsePublishedTime(input: string | null): number | null {
+  if (!input) return null;
+  const ms = Date.parse(input);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function readerPageToArticle(page: ReaderPageDTO): ArticleDTO {
+  const now = Date.now();
+  const publishedAt = parsePublishedTime(page.publishedTime);
+  return {
+    id: `reader:${page.finalUrl}`,
+    feedId: "reader",
+    feedTitle: page.siteName ?? "Reader",
+    title: page.title,
+    url: page.finalUrl,
+    author: page.byline,
+    contentHtml: page.contentHtml,
+    contentPlain: page.contentPlain,
+    thumbnailUrl: page.thumbnailUrl,
+    publishedAt,
+    sortKey: publishedAt ?? now,
+    detectedLanguage: page.lang,
+    isRead: true,
+    isStarred: false,
+    readAt: now,
+    aiSummaryShort: page.excerpt,
+    aiTitleJa: null,
+    aiTags: null,
+    aiStage1Status: "none",
+    aiSummaryFull: null,
+    aiTranslation: null,
+    aiKeyPoints: null,
+    aiRelatedLinks: null,
+    aiStage2Status: "none",
+    aiStage2Error: null,
+    note: null,
+    createdAt: now,
+  };
+}
 
 export default function FeedsPage() {
   const router = useRouter();
@@ -37,6 +88,9 @@ export default function FeedsPage() {
   const [markingRead, setMarkingRead] = useState(false);
   const [autoMarkAsRead, setAutoMarkAsRead] = useState(true);
   const [slideDirection, setSlideDirection] = useState<"forward" | "back">("forward");
+  const [readerUrl, setReaderUrl] = useState("");
+  const [readerLoading, setReaderLoading] = useState(false);
+  const [readerError, setReaderError] = useState<string | null>(null);
   // URL からの初期状態復元が済むまで loadInitial を待たせ、既定→復元の二重 fetch を防ぐ
   const [restored, setRestored] = useState(false);
 
@@ -277,10 +331,12 @@ export default function FeedsPage() {
   // Next のナビゲーション/再 fetch も起こさない。
   useEffect(() => {
     if (!restored) return;
+    const selectedArticleId =
+      selected?.id && !selected.id.startsWith("reader:") ? selected.id : null;
     const url =
       window.location.pathname +
       buildFeedsUrl({
-        articleId: selected?.id ?? null,
+        articleId: selectedArticleId,
         feedId: selectedFeedId,
         category: selectedCategory,
         view,
@@ -360,6 +416,44 @@ export default function FeedsPage() {
     router.replace("/login");
   }
 
+  async function openReader(rawUrl = readerUrl) {
+    const url = rawUrl.trim();
+    if (!url || readerLoading) return;
+
+    setReaderUrl(url);
+    setReaderLoading(true);
+    setReaderError(null);
+    try {
+      const res = await fetch("/api/reader", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (res.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const message =
+          res.status === 400
+            ? "URLを確認してください"
+            : res.status === 422
+              ? "Yomu内で本文を抽出できませんでした"
+              : data?.error ?? "ページを取得できませんでした";
+        setReaderError(message);
+        return;
+      }
+      const article = readerPageToArticle(data.page as ReaderPageDTO);
+      setSelected(article);
+      if (isMobile) goToMobileView("detail");
+    } catch {
+      setReaderError("ページを取得できませんでした");
+    } finally {
+      setReaderLoading(false);
+    }
+  }
+
   const handleSelect = useCallback((a: ArticleDTO) => {
     setSelected(a);
     if (isMobile) goToMobileView("detail");
@@ -389,6 +483,7 @@ export default function FeedsPage() {
   const showList = !isMobile || mobileView === "list";
   const showDetail = !isMobile || mobileView === "detail";
   const slideClass = isMobile ? (slideDirection === "forward" ? "mobile-panel-forward" : "mobile-panel-back") : "";
+  const selectedIsReader = selected?.id.startsWith("reader:") ?? false;
 
   return (
     <div className="flex h-screen">
@@ -510,6 +605,62 @@ export default function FeedsPage() {
             )}
           </div>
         )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            openReader();
+          }}
+          className="border-b p-2"
+          style={{ borderColor: "var(--card-border)" }}
+        >
+          <div className="flex items-center gap-2">
+            <input
+              type="url"
+              placeholder="URL..."
+              value={readerUrl}
+              onChange={(e) => setReaderUrl(e.target.value)}
+              className="min-w-0 flex-1 rounded px-2 py-1 text-sm"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+            />
+            <button
+              type="submit"
+              disabled={readerLoading || !readerUrl.trim()}
+              className="shrink-0 rounded px-2.5 py-1 text-sm disabled:opacity-40"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+            >
+              {readerLoading ? "…" : "開く"}
+            </button>
+          </div>
+          <div className="mt-2 flex gap-1 overflow-x-auto pb-0.5">
+            {READER_SHORTCUTS.map((shortcut) => (
+              <button
+                key={shortcut.url}
+                type="button"
+                onClick={() => openReader(shortcut.url)}
+                disabled={readerLoading}
+                className="shrink-0 rounded px-2 py-1 text-xs disabled:opacity-40"
+                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              >
+                {shortcut.label}
+              </button>
+            ))}
+          </div>
+          {readerError && (
+            <p className="mt-1.5 text-xs" style={{ color: "#f87171" }}>
+              {readerError}
+              {readerUrl.trim() && (
+                <a
+                  href={readerUrl.trim()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-2 underline underline-offset-2"
+                >
+                  外部で開く
+                </a>
+              )}
+            </p>
+          )}
+        </form>
         <div className="flex-1 overflow-hidden">
           <ArticleList
             articles={articles}
@@ -558,6 +709,7 @@ export default function FeedsPage() {
             key={selected?.id ?? "empty"}
             article={selected}
             onChange={handleArticleChange}
+            readOnly={selectedIsReader}
           />
         </div>
       </section>
