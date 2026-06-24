@@ -8,6 +8,7 @@ export interface FeedWithUnread {
   fetchIntervalMin: number;
   lastFetchedAt: number | null;
   lastFetchStatus: string;
+  lastFetchError: string | null;
   consecutiveFetchFailures: number;
   aiEnabled: boolean;
   unreadCount: number;

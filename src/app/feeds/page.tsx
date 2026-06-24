@@ -26,6 +26,47 @@ const READER_SHORTCUTS = [
   { label: "Indie Hackers", url: "https://www.indiehackers.com/" },
 ];
 
+type ReaderFailureReason =
+  | "fetch_error"
+  | "http_error"
+  | "unsupported_content_type"
+  | "not_readable"
+  | "too_short";
+
+interface ReaderErrorResponse {
+  reason?: ReaderFailureReason;
+  message?: string;
+  status?: number;
+  contentType?: string;
+}
+
+interface ReaderResponse extends ReaderErrorResponse {
+  page?: ReaderPageDTO;
+}
+
+function formatReaderError(status: number, data: ReaderErrorResponse | null): string {
+  if (status === 400) return "URLを確認してください";
+
+  switch (data?.reason) {
+    case "http_error":
+      return data.status
+        ? `ページを取得できませんでした (HTTP ${data.status})`
+        : "ページを取得できませんでした";
+    case "unsupported_content_type":
+      return data.contentType
+        ? `HTMLページではありません (${data.contentType})`
+        : "HTMLページではありません";
+    case "not_readable":
+      return "記事本文として抽出できませんでした。JS描画ページまたは一覧ページの可能性があります";
+    case "too_short":
+      return "抽出できた本文が短すぎました";
+    case "fetch_error":
+      return "ページを取得できませんでした。URLや接続先の制限を確認してください";
+    default:
+      return "ページを取得できませんでした";
+  }
+}
+
 function parsePublishedTime(input: string | null): number | null {
   if (!input) return null;
   const ms = Date.parse(input);
@@ -433,18 +474,16 @@ export default function FeedsPage() {
         router.replace("/login");
         return;
       }
-      const data = await res.json().catch(() => null);
+      const data = (await res.json().catch(() => null)) as ReaderResponse | null;
       if (!res.ok) {
-        const message =
-          res.status === 400
-            ? "URLを確認してください"
-            : res.status === 422
-              ? "Yomu内で本文を抽出できませんでした"
-              : data?.error ?? "ページを取得できませんでした";
-        setReaderError(message);
+        setReaderError(formatReaderError(res.status, data));
         return;
       }
-      const article = readerPageToArticle(data.page as ReaderPageDTO);
+      if (!data?.page) {
+        setReaderError("ページを取得できませんでした");
+        return;
+      }
+      const article = readerPageToArticle(data.page);
       setSelected(article);
       if (isMobile) goToMobileView("detail");
     } catch {
@@ -533,6 +572,12 @@ export default function FeedsPage() {
             setSelected(null);
             if (isMobile) goToMobileView("list");
           }}
+          readerUrl={readerUrl}
+          readerLoading={readerLoading}
+          readerError={readerError}
+          readerShortcuts={READER_SHORTCUTS}
+          onReaderUrlChange={setReaderUrl}
+          onOpenReader={openReader}
         />
       </div>
       <section
@@ -605,62 +650,6 @@ export default function FeedsPage() {
             )}
           </div>
         )}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            openReader();
-          }}
-          className="border-b p-2"
-          style={{ borderColor: "var(--card-border)" }}
-        >
-          <div className="flex items-center gap-2">
-            <input
-              type="url"
-              placeholder="URL..."
-              value={readerUrl}
-              onChange={(e) => setReaderUrl(e.target.value)}
-              className="min-w-0 flex-1 rounded px-2 py-1 text-sm"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-            />
-            <button
-              type="submit"
-              disabled={readerLoading || !readerUrl.trim()}
-              className="shrink-0 rounded px-2.5 py-1 text-sm disabled:opacity-40"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-            >
-              {readerLoading ? "…" : "開く"}
-            </button>
-          </div>
-          <div className="mt-2 flex gap-1 overflow-x-auto pb-0.5">
-            {READER_SHORTCUTS.map((shortcut) => (
-              <button
-                key={shortcut.url}
-                type="button"
-                onClick={() => openReader(shortcut.url)}
-                disabled={readerLoading}
-                className="shrink-0 rounded px-2 py-1 text-xs disabled:opacity-40"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-              >
-                {shortcut.label}
-              </button>
-            ))}
-          </div>
-          {readerError && (
-            <p className="mt-1.5 text-xs" style={{ color: "#f87171" }}>
-              {readerError}
-              {readerUrl.trim() && (
-                <a
-                  href={readerUrl.trim()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-2 underline underline-offset-2"
-                >
-                  外部で開く
-                </a>
-              )}
-            </p>
-          )}
-        </form>
         <div className="flex-1 overflow-hidden">
           <ArticleList
             articles={articles}

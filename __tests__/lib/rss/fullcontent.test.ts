@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { fetchReadablePage } from "@/lib/rss/fullcontent";
+import { fetchReadablePage, fetchReadablePageResult } from "@/lib/rss/fullcontent";
 
 const previousAllowPrivateFeedUrls = process.env.ALLOW_PRIVATE_FEED_URLS;
 let server: Server | null = null;
@@ -21,9 +21,14 @@ afterEach(async () => {
   server = null;
 });
 
-function startHtmlServer(html: string): Promise<string> {
+function startHtmlServer(
+  html: string,
+  options: { status?: number; contentType?: string } = {},
+): Promise<string> {
   server = createServer((_, res) => {
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.writeHead(options.status ?? 200, {
+      "content-type": options.contentType ?? "text/html; charset=utf-8",
+    });
     res.end(html);
   });
   return new Promise((resolve) => {
@@ -68,5 +73,53 @@ describe("fetchReadablePage", () => {
     expect(page?.contentHtml).toContain(`href="${new URL("/next", url).toString()}"`);
     expect(page?.contentHtml).toContain(`src="${new URL("/hero.png", url).toString()}"`);
     expect(page?.thumbnailUrl).toBe(new URL("/og.png", url).toString());
+  });
+
+  it("抽出できないHTMLでは not_readable を返す", async () => {
+    process.env.ALLOW_PRIVATE_FEED_URLS = "true";
+    const url = await startHtmlServer(`<!doctype html>
+      <html>
+        <head><title>Client App</title></head>
+        <body>
+          <div id="root"></div>
+          <script>window.__APP__ = { page: "launches" };</script>
+        </body>
+      </html>`);
+
+    const result = await fetchReadablePageResult(url);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("not_readable");
+      expect(result.finalUrl).toBe(url);
+    }
+  });
+
+  it("HTML以外では unsupported_content_type を返す", async () => {
+    process.env.ALLOW_PRIVATE_FEED_URLS = "true";
+    const url = await startHtmlServer(`{"ok":true}`, {
+      contentType: "application/json",
+    });
+
+    const result = await fetchReadablePageResult(url);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("unsupported_content_type");
+      expect(result.contentType).toContain("application/json");
+    }
+  });
+
+  it("HTTPエラーではステータスを返す", async () => {
+    process.env.ALLOW_PRIVATE_FEED_URLS = "true";
+    const url = await startHtmlServer("Service unavailable", { status: 503 });
+
+    const result = await fetchReadablePageResult(url);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("http_error");
+      expect(result.status).toBe(503);
+    }
   });
 });

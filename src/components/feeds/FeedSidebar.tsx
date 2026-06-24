@@ -20,6 +20,99 @@ interface Props {
   isMobile?: boolean;
   view?: "feeds" | "starred";
   onSelectStarred?: () => void;
+  readerUrl: string;
+  readerLoading: boolean;
+  readerError: string | null;
+  readerShortcuts: { label: string; url: string }[];
+  onReaderUrlChange: (url: string) => void;
+  onOpenReader: (url?: string) => void;
+}
+
+function formatFeedFetchFailure(feed: FeedWithUnread): string {
+  const count = `${feed.consecutiveFetchFailures}回連続`;
+  const error = feed.lastFetchError?.trim();
+  return error ? `取得失敗 (${count}): ${error}` : `取得失敗 (${count})`;
+}
+
+function ReaderBlock({
+  readerUrl,
+  readerLoading,
+  readerError,
+  readerShortcuts,
+  onReaderUrlChange,
+  onOpenReader,
+}: {
+  readerUrl: string;
+  readerLoading: boolean;
+  readerError: string | null;
+  readerShortcuts: { label: string; url: string }[];
+  onReaderUrlChange: (url: string) => void;
+  onOpenReader: (url?: string) => void;
+}) {
+  const trimmedUrl = readerUrl.trim();
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onOpenReader();
+      }}
+      className="mt-3 border-t pt-2"
+      style={{ borderColor: "var(--card-border)" }}
+    >
+      <div className="px-2 text-xs uppercase" style={{ color: "var(--muted)" }}>
+        Reader
+      </div>
+      <div className="mt-1 flex gap-1 px-2">
+        <input
+          type="url"
+          placeholder="URL..."
+          value={readerUrl}
+          onChange={(e) => onReaderUrlChange(e.target.value)}
+          className="min-w-0 flex-1 rounded px-2 py-1 text-xs"
+          style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+        />
+        <button
+          type="submit"
+          disabled={readerLoading || !trimmedUrl}
+          className="shrink-0 rounded px-2 py-1 text-xs disabled:opacity-40"
+          style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+        >
+          {readerLoading ? "…" : "開く"}
+        </button>
+      </div>
+      <div className="mt-1 grid gap-1 px-2">
+        {readerShortcuts.map((shortcut) => (
+          <button
+            key={shortcut.url}
+            type="button"
+            onClick={() => onOpenReader(shortcut.url)}
+            disabled={readerLoading}
+            className="min-w-0 rounded px-2 py-1 text-left text-xs disabled:opacity-40"
+            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+            title={shortcut.url}
+          >
+            <span className="block truncate">{shortcut.label}</span>
+          </button>
+        ))}
+      </div>
+      {readerError && (
+        <p className="mt-1.5 px-2 text-xs leading-relaxed" style={{ color: "#f87171" }}>
+          {readerError}
+          {trimmedUrl && (
+            <a
+              href={trimmedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-2 underline underline-offset-2"
+            >
+              外部
+            </a>
+          )}
+        </p>
+      )}
+    </form>
+  );
 }
 
 export function FeedSidebar({
@@ -38,6 +131,12 @@ export function FeedSidebar({
   isMobile,
   view = "feeds",
   onSelectStarred,
+  readerUrl,
+  readerLoading,
+  readerError,
+  readerShortcuts,
+  onReaderUrlChange,
+  onOpenReader,
 }: Props) {
   const grouped = feeds.reduce<Record<string, FeedWithUnread[]>>((acc, f) => {
     (acc[f.category] ??= []).push(f);
@@ -227,6 +326,14 @@ export function FeedSidebar({
               <span className="text-yellow-500">★</span>
               <span>お気に入り</span>
             </button>
+            <ReaderBlock
+              readerUrl={readerUrl}
+              readerLoading={readerLoading}
+              readerError={readerError}
+              readerShortcuts={readerShortcuts}
+              onReaderUrlChange={onReaderUrlChange}
+              onOpenReader={onOpenReader}
+            />
           </>
         )}
         {categories.map((cat) => (
@@ -476,7 +583,13 @@ function CategoryGroup({
                 )}
                 <span className="min-w-0 flex-1 truncate">{f.title}</span>
                 {!selectMode && f.consecutiveFetchFailures >= 3 && (
-                  <span className="shrink-0 text-xs text-yellow-500" title="取得失敗">⚠</span>
+                  <span
+                    className="shrink-0 text-xs text-yellow-500"
+                    title={formatFeedFetchFailure(f)}
+                    aria-label={formatFeedFetchFailure(f)}
+                  >
+                    ⚠
+                  </span>
                 )}
                 {!selectMode && f.unreadCount > 0 && (
                   <span className="shrink-0 text-xs" style={{ color: "var(--muted)" }}>

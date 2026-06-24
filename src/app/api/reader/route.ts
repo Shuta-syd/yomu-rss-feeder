@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth, jsonError } from "@/lib/api-helpers";
-import { fetchReadablePage } from "@/lib/rss/fullcontent";
+import { fetchReadablePageResult } from "@/lib/rss/fullcontent";
 
 const readerSchema = z.object({
   url: z.string().url().max(2048),
@@ -13,10 +13,21 @@ export async function POST(req: NextRequest) {
     const parsed = readerSchema.safeParse(json);
     if (!parsed.success) return jsonError(400, "Invalid request");
 
-    const page = await fetchReadablePage(parsed.data.url);
-    if (!page) return jsonError(422, "Readable content could not be extracted");
+    const result = await fetchReadablePageResult(parsed.data.url);
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          error: "Readable content could not be extracted",
+          reason: result.reason,
+          message: result.message,
+          finalUrl: result.finalUrl,
+          status: result.status,
+          contentType: result.contentType,
+        },
+        { status: 422 },
+      );
+    }
 
-    return NextResponse.json({ page });
+    return NextResponse.json({ page: result.page });
   });
 }
-

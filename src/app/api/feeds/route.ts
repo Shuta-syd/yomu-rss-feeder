@@ -20,6 +20,7 @@ export async function GET() {
         fetchIntervalMin: feeds.fetchIntervalMin,
         lastFetchedAt: feeds.lastFetchedAt,
         lastFetchStatus: feeds.lastFetchStatus,
+        lastFetchError: feeds.lastFetchError,
         consecutiveFetchFailures: feeds.consecutiveFetchFailures,
         aiEnabled: feeds.aiEnabled,
         unreadCount: sql<number>`COALESCE(SUM(CASE WHEN ${articles.isRead} = 0 THEN 1 ELSE 0 END), 0)`,
