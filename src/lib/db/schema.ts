@@ -28,6 +28,24 @@ export const feeds = sqliteTable(
   (table) => [index("idx_feeds_category").on(table.category)],
 );
 
+export const savedSites = sqliteTable(
+  "saved_sites",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    category: text("category").notNull().default("未分類"),
+    faviconUrl: text("favicon_url"),
+    createdAt: integer("created_at")
+      .notNull()
+      .$defaultFn(() => Date.now()),
+  },
+  (table) => [
+    uniqueIndex("idx_saved_sites_url").on(table.url),
+    index("idx_saved_sites_category").on(table.category),
+  ],
+);
+
 export const articles = sqliteTable(
   "articles",
   {
@@ -85,5 +103,7 @@ export const pushSubscriptions = sqliteTable("push_subscriptions", {
 
 export type Feed = typeof feeds.$inferSelect;
 export type NewFeed = typeof feeds.$inferInsert;
+export type SavedSite = typeof savedSites.$inferSelect;
+export type NewSavedSite = typeof savedSites.$inferInsert;
 export type Article = typeof articles.$inferSelect;
 export type NewArticle = typeof articles.$inferInsert;

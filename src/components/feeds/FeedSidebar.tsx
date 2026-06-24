@@ -1,16 +1,19 @@
 "use client";
 
 import type { FeedWithUnread } from "@/types/feed";
+import type { SavedSiteDTO } from "@/types/site";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { FeedIcon } from "./FeedIcon";
 
 interface Props {
   feeds: FeedWithUnread[];
+  sites: SavedSiteDTO[];
   selectedFeedId: string | null;
   selectedCategory: string | null;
   onSelect: (feedId: string | null) => void;
   onSelectCategory: (category: string) => void;
   onAddFeed: () => void;
+  onSitesChanged: () => void;
   onSync: () => void;
   syncing: boolean;
   onLogout: () => void;
@@ -20,12 +23,6 @@ interface Props {
   isMobile?: boolean;
   view?: "feeds" | "starred";
   onSelectStarred?: () => void;
-  readerUrl: string;
-  readerLoading: boolean;
-  readerError: string | null;
-  readerShortcuts: { label: string; url: string }[];
-  onReaderUrlChange: (url: string) => void;
-  onOpenReader: (url?: string) => void;
 }
 
 function formatFeedFetchFailure(feed: FeedWithUnread): string {
@@ -34,94 +31,127 @@ function formatFeedFetchFailure(feed: FeedWithUnread): string {
   return error ? `取得失敗 (${count}): ${error}` : `取得失敗 (${count})`;
 }
 
-function ReaderBlock({
-  readerUrl,
-  readerLoading,
-  readerError,
-  readerShortcuts,
-  onReaderUrlChange,
-  onOpenReader,
+function SavedSitesBlock({
+  sites,
+  onSitesChanged,
 }: {
-  readerUrl: string;
-  readerLoading: boolean;
-  readerError: string | null;
-  readerShortcuts: { label: string; url: string }[];
-  onReaderUrlChange: (url: string) => void;
-  onOpenReader: (url?: string) => void;
+  sites: SavedSiteDTO[];
+  onSitesChanged: () => void;
 }) {
-  const trimmedUrl = readerUrl.trim();
+  const [siteUrl, setSiteUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const trimmedUrl = siteUrl.trim();
+
+  async function addSite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!trimmedUrl || loading) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/sites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: trimmedUrl }),
+      });
+      if (res.ok) {
+        setSiteUrl("");
+        onSitesChanged();
+        return;
+      }
+      if (res.status === 409) setError("このサイトは既に登録されています");
+      else if (res.status === 400) setError("URLを確認してください");
+      else setError("サイトの追加に失敗しました");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteSite(site: SavedSiteDTO) {
+    if (!confirm(`${site.title} を削除します。よろしいですか？`)) return;
+    setDeletingId(site.id);
+    try {
+      const res = await fetch(`/api/sites/${site.id}`, { method: "DELETE" });
+      if (res.ok) onSitesChanged();
+      else setError("サイトの削除に失敗しました");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        onOpenReader();
-      }}
-      className="mt-3 border-t pt-2"
-      style={{ borderColor: "var(--card-border)" }}
-    >
+    <section className="mt-3 border-t pt-2" style={{ borderColor: "var(--card-border)" }}>
       <div className="px-2 text-xs uppercase" style={{ color: "var(--muted)" }}>
-        Reader
+        Sites
       </div>
-      <div className="mt-1 flex gap-1 px-2">
+      <form onSubmit={addSite} className="mt-1 flex gap-1 px-2">
         <input
           type="url"
-          placeholder="URL..."
-          value={readerUrl}
-          onChange={(e) => onReaderUrlChange(e.target.value)}
+          placeholder="https://example.com"
+          value={siteUrl}
+          onChange={(e) => setSiteUrl(e.target.value)}
           className="min-w-0 flex-1 rounded px-2 py-1 text-xs"
           style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
         />
         <button
           type="submit"
-          disabled={readerLoading || !trimmedUrl}
+          disabled={loading || !trimmedUrl}
           className="shrink-0 rounded px-2 py-1 text-xs disabled:opacity-40"
           style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
         >
-          {readerLoading ? "…" : "開く"}
+          {loading ? "…" : "追加"}
         </button>
-      </div>
+      </form>
       <div className="mt-1 grid gap-1 px-2">
-        {readerShortcuts.map((shortcut) => (
-          <button
-            key={shortcut.url}
-            type="button"
-            onClick={() => onOpenReader(shortcut.url)}
-            disabled={readerLoading}
-            className="min-w-0 rounded px-2 py-1 text-left text-xs disabled:opacity-40"
+        {sites.map((site) => (
+          <div
+            key={site.id}
+            className="flex min-w-0 items-center gap-1 rounded px-2 py-1 text-xs"
             style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-            title={shortcut.url}
           >
-            <span className="block truncate">{shortcut.label}</span>
-          </button>
-        ))}
-      </div>
-      {readerError && (
-        <p className="mt-1.5 px-2 text-xs leading-relaxed" style={{ color: "#f87171" }}>
-          {readerError}
-          {trimmedUrl && (
             <a
-              href={trimmedUrl}
+              href={site.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="ml-2 underline underline-offset-2"
+              className="flex min-w-0 flex-1 items-center gap-2"
+              title={site.url}
             >
-              外部
+              <FeedIcon url={site.faviconUrl} title={site.title} />
+              <span className="min-w-0 flex-1 truncate">{site.title}</span>
             </a>
-          )}
+            <button
+              type="button"
+              onClick={() => deleteSite(site)}
+              disabled={deletingId === site.id}
+              className="shrink-0 rounded px-1 opacity-60 transition-opacity hover:opacity-100 disabled:opacity-30"
+              title="削除"
+              aria-label={`${site.title}を削除`}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+      {error && (
+        <p className="mt-1.5 px-2 text-xs leading-relaxed" style={{ color: "#f87171" }}>
+          {error}
         </p>
       )}
-    </form>
+    </section>
   );
 }
 
 export function FeedSidebar({
   feeds,
+  sites,
   selectedFeedId,
   selectedCategory,
   onSelect,
   onSelectCategory,
   onAddFeed,
+  onSitesChanged,
   onSync,
   syncing,
   onLogout,
@@ -131,12 +161,6 @@ export function FeedSidebar({
   isMobile,
   view = "feeds",
   onSelectStarred,
-  readerUrl,
-  readerLoading,
-  readerError,
-  readerShortcuts,
-  onReaderUrlChange,
-  onOpenReader,
 }: Props) {
   const grouped = feeds.reduce<Record<string, FeedWithUnread[]>>((acc, f) => {
     (acc[f.category] ??= []).push(f);
@@ -326,14 +350,7 @@ export function FeedSidebar({
               <span className="text-yellow-500">★</span>
               <span>お気に入り</span>
             </button>
-            <ReaderBlock
-              readerUrl={readerUrl}
-              readerLoading={readerLoading}
-              readerError={readerError}
-              readerShortcuts={readerShortcuts}
-              onReaderUrlChange={onReaderUrlChange}
-              onOpenReader={onOpenReader}
-            />
+            <SavedSitesBlock sites={sites} onSitesChanged={onSitesChanged} />
           </>
         )}
         {categories.map((cat) => (

@@ -13,103 +13,13 @@ import { parseFeedsUrl, buildFeedsUrl } from "@/lib/feeds-url-state";
 import { mergeArticles, appendArticles } from "@/lib/merge-articles";
 import { subscribeUpdates } from "@/lib/article-note-saver";
 import type { FeedWithUnread } from "@/types/feed";
+import type { SavedSiteDTO } from "@/types/site";
 import type { ArticleDTO } from "@/types/article";
-import type { ReaderPageDTO } from "@/types/reader";
-
-const READER_SHORTCUTS = [
-  { label: "YC RFS", url: "https://www.ycombinator.com/rfs" },
-  { label: "Launch YC", url: "https://www.ycombinator.com/launches" },
-  { label: "IdeaBrowser", url: "https://www.ideabrowser.com/" },
-  { label: "THE BRIDGE", url: "https://thebridge.jp/" },
-  { label: "Product Hunt", url: "https://www.producthunt.com/" },
-  { label: "Exploding Topics", url: "https://explodingtopics.com/" },
-  { label: "Indie Hackers", url: "https://www.indiehackers.com/" },
-];
-
-type ReaderFailureReason =
-  | "fetch_error"
-  | "http_error"
-  | "unsupported_content_type"
-  | "not_readable"
-  | "too_short";
-
-interface ReaderErrorResponse {
-  reason?: ReaderFailureReason;
-  message?: string;
-  status?: number;
-  contentType?: string;
-}
-
-interface ReaderResponse extends ReaderErrorResponse {
-  page?: ReaderPageDTO;
-}
-
-function formatReaderError(status: number, data: ReaderErrorResponse | null): string {
-  if (status === 400) return "URLを確認してください";
-
-  switch (data?.reason) {
-    case "http_error":
-      return data.status
-        ? `ページを取得できませんでした (HTTP ${data.status})`
-        : "ページを取得できませんでした";
-    case "unsupported_content_type":
-      return data.contentType
-        ? `HTMLページではありません (${data.contentType})`
-        : "HTMLページではありません";
-    case "not_readable":
-      return "記事本文として抽出できませんでした。JS描画ページまたは一覧ページの可能性があります";
-    case "too_short":
-      return "抽出できた本文が短すぎました";
-    case "fetch_error":
-      return "ページを取得できませんでした。URLや接続先の制限を確認してください";
-    default:
-      return "ページを取得できませんでした";
-  }
-}
-
-function parsePublishedTime(input: string | null): number | null {
-  if (!input) return null;
-  const ms = Date.parse(input);
-  return Number.isFinite(ms) ? ms : null;
-}
-
-function readerPageToArticle(page: ReaderPageDTO): ArticleDTO {
-  const now = Date.now();
-  const publishedAt = parsePublishedTime(page.publishedTime);
-  return {
-    id: `reader:${page.finalUrl}`,
-    feedId: "reader",
-    feedTitle: page.siteName ?? "Reader",
-    title: page.title,
-    url: page.finalUrl,
-    author: page.byline,
-    contentHtml: page.contentHtml,
-    contentPlain: page.contentPlain,
-    thumbnailUrl: page.thumbnailUrl,
-    publishedAt,
-    sortKey: publishedAt ?? now,
-    detectedLanguage: page.lang,
-    isRead: true,
-    isStarred: false,
-    readAt: now,
-    aiSummaryShort: page.excerpt,
-    aiTitleJa: null,
-    aiTags: null,
-    aiStage1Status: "none",
-    aiSummaryFull: null,
-    aiTranslation: null,
-    aiKeyPoints: null,
-    aiRelatedLinks: null,
-    aiStage2Status: "none",
-    aiStage2Error: null,
-    note: null,
-    createdAt: now,
-  };
-}
 
 export default function FeedsPage() {
   const router = useRouter();
   const [feeds, setFeeds] = useState<FeedWithUnread[]>([]);
+  const [sites, setSites] = useState<SavedSiteDTO[]>([]);
   const [articles, setArticles] = useState<ArticleDTO[]>([]);
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -129,9 +39,6 @@ export default function FeedsPage() {
   const [markingRead, setMarkingRead] = useState(false);
   const [autoMarkAsRead, setAutoMarkAsRead] = useState(true);
   const [slideDirection, setSlideDirection] = useState<"forward" | "back">("forward");
-  const [readerUrl, setReaderUrl] = useState("");
-  const [readerLoading, setReaderLoading] = useState(false);
-  const [readerError, setReaderError] = useState<string | null>(null);
   // URL からの初期状態復元が済むまで loadInitial を待たせ、既定→復元の二重 fetch を防ぐ
   const [restored, setRestored] = useState(false);
 
@@ -184,6 +91,17 @@ export default function FeedsPage() {
     }
     const data = await res.json();
     setFeeds(data.feeds);
+  }, [router]);
+
+  const loadSites = useCallback(async () => {
+    const res = await fetch("/api/sites");
+    if (res.status === 401) {
+      router.replace("/login");
+      return;
+    }
+    if (!res.ok) return;
+    const data = await res.json();
+    setSites(data.sites);
   }, [router]);
 
   const loadInitial = useCallback(async () => {
@@ -300,7 +218,8 @@ export default function FeedsPage() {
 
   useEffect(() => {
     loadFeeds();
-  }, [loadFeeds]);
+    loadSites();
+  }, [loadFeeds, loadSites]);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -372,12 +291,10 @@ export default function FeedsPage() {
   // Next のナビゲーション/再 fetch も起こさない。
   useEffect(() => {
     if (!restored) return;
-    const selectedArticleId =
-      selected?.id && !selected.id.startsWith("reader:") ? selected.id : null;
     const url =
       window.location.pathname +
       buildFeedsUrl({
-        articleId: selectedArticleId,
+        articleId: selected?.id ?? null,
         feedId: selectedFeedId,
         category: selectedCategory,
         view,
@@ -457,42 +374,6 @@ export default function FeedsPage() {
     router.replace("/login");
   }
 
-  async function openReader(rawUrl = readerUrl) {
-    const url = rawUrl.trim();
-    if (!url || readerLoading) return;
-
-    setReaderUrl(url);
-    setReaderLoading(true);
-    setReaderError(null);
-    try {
-      const res = await fetch("/api/reader", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      if (res.status === 401) {
-        router.replace("/login");
-        return;
-      }
-      const data = (await res.json().catch(() => null)) as ReaderResponse | null;
-      if (!res.ok) {
-        setReaderError(formatReaderError(res.status, data));
-        return;
-      }
-      if (!data?.page) {
-        setReaderError("ページを取得できませんでした");
-        return;
-      }
-      const article = readerPageToArticle(data.page);
-      setSelected(article);
-      if (isMobile) goToMobileView("detail");
-    } catch {
-      setReaderError("ページを取得できませんでした");
-    } finally {
-      setReaderLoading(false);
-    }
-  }
-
   const handleSelect = useCallback((a: ArticleDTO) => {
     setSelected(a);
     if (isMobile) goToMobileView("detail");
@@ -522,7 +403,6 @@ export default function FeedsPage() {
   const showList = !isMobile || mobileView === "list";
   const showDetail = !isMobile || mobileView === "detail";
   const slideClass = isMobile ? (slideDirection === "forward" ? "mobile-panel-forward" : "mobile-panel-back") : "";
-  const selectedIsReader = selected?.id.startsWith("reader:") ?? false;
 
   return (
     <div className="flex h-screen">
@@ -532,6 +412,7 @@ export default function FeedsPage() {
       >
         <FeedSidebar
           feeds={feeds}
+          sites={sites}
           selectedFeedId={selectedFeedId}
           selectedCategory={selectedCategory}
           onSelect={(id) => {
@@ -549,6 +430,7 @@ export default function FeedsPage() {
             if (isMobile) goToMobileView("list");
           }}
           onAddFeed={() => setAddOpen(true)}
+          onSitesChanged={loadSites}
           onSync={sync}
           syncing={syncing}
           onLogout={logout}
@@ -572,12 +454,6 @@ export default function FeedsPage() {
             setSelected(null);
             if (isMobile) goToMobileView("list");
           }}
-          readerUrl={readerUrl}
-          readerLoading={readerLoading}
-          readerError={readerError}
-          readerShortcuts={READER_SHORTCUTS}
-          onReaderUrlChange={setReaderUrl}
-          onOpenReader={openReader}
         />
       </div>
       <section
@@ -698,7 +574,6 @@ export default function FeedsPage() {
             key={selected?.id ?? "empty"}
             article={selected}
             onChange={handleArticleChange}
-            readOnly={selectedIsReader}
           />
         </div>
       </section>

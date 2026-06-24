@@ -23,7 +23,6 @@ function humanizeError(raw: string): string {
 interface Props {
   article: ArticleDTO | null;
   onChange: (a: ArticleDTO) => void;
-  readOnly?: boolean;
 }
 
 interface RelatedLink {
@@ -54,7 +53,7 @@ const ARTICLE_PROSE_STYLE: CSSProperties = {
   "--tw-prose-quote-borders": "var(--accent)",
 } as CSSProperties;
 
-export const ArticleDetail = memo(function ArticleDetail({ article, onChange, readOnly = false }: Props) {
+export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: Props) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [streamText, setStreamText] = useState("");
@@ -83,12 +82,12 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange, re
   }, [articleId, articleNote]);
 
   useEffect(() => {
-    if (!articleId || readOnly) return;
+    if (!articleId) return;
     return subscribeStatus(articleId, articleNote, setNoteStatus);
-  }, [articleId, articleNote, readOnly]);
+  }, [articleId, articleNote]);
 
   const runStage1 = useCallback(async () => {
-    if (!article || readOnly) return;
+    if (!article) return;
     setStage1Loading(true);
     try {
       const res = await fetch(`/api/articles/${article.id}/stage1`, { method: "POST" });
@@ -97,7 +96,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange, re
     } finally {
       setStage1Loading(false);
     }
-  }, [article, onChange, readOnly]);
+  }, [article, onChange]);
 
   useEffect(() => {
     setAiError(null);
@@ -108,7 +107,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange, re
   }, [articleId, articleTranslation]);
 
   const runAi = useCallback(async () => {
-    if (!article || readOnly) return;
+    if (!article) return;
     setAiLoading(true);
     setAiError(null);
     setStreamText("");
@@ -168,7 +167,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange, re
     } finally {
       setAiLoading(false);
     }
-  }, [article, onChange, readOnly]);
+  }, [article, onChange]);
 
   if (!article) {
     return (
@@ -182,7 +181,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange, re
   }
 
   async function toggle(field: "isRead" | "isStarred", value: boolean) {
-    if (!article || readOnly) return;
+    if (!article) return;
     const res = await fetch(`/api/articles/${article.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -233,47 +232,45 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange, re
               </a>
             </div>
           </div>
-          {!readOnly && (
-            <div className="flex shrink-0 gap-1.5 overflow-x-auto">
-              <button
-                onClick={runStage1}
-                disabled={stage1Loading || article.aiStage1Status === "processing"}
-                className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors disabled:opacity-50"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-                title="タイトル翻訳・要約・タグを再生成"
-              >
-                {stage1Loading || article.aiStage1Status === "processing" ? "翻訳中..." : "🌐 翻訳"}
-              </button>
-              <button
-                onClick={() => toggle("isStarred", !article.isStarred)}
-                className="shrink-0 rounded-md px-2.5 py-1.5 text-sm transition-colors"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-                title={article.isStarred ? "スター解除" : "スター"}
-              >
-                {article.isStarred ? "★" : "☆"}
-              </button>
-              <button
-                onClick={() => setNoteOpen((v) => !v)}
-                className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
-                style={{
-                  background: note ? "var(--accent-subtle)" : "var(--card)",
-                  color: note ? "var(--accent)" : "inherit",
-                  border: "1px solid var(--card-border)",
-                }}
-                title={note ? "メモあり" : "メモを追加"}
-                aria-expanded={noteOpen}
-              >
-                📝 {note ? "" : "メモ"}
-              </button>
-              <button
-                onClick={() => toggle("isRead", !article.isRead)}
-                className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-              >
-                {article.isRead ? "未読に戻す" : "既読にする"}
-              </button>
-            </div>
-          )}
+          <div className="flex shrink-0 gap-1.5 overflow-x-auto">
+            <button
+              onClick={runStage1}
+              disabled={stage1Loading || article.aiStage1Status === "processing"}
+              className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors disabled:opacity-50"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              title="タイトル翻訳・要約・タグを再生成"
+            >
+              {stage1Loading || article.aiStage1Status === "processing" ? "翻訳中..." : "🌐 翻訳"}
+            </button>
+            <button
+              onClick={() => toggle("isStarred", !article.isStarred)}
+              className="shrink-0 rounded-md px-2.5 py-1.5 text-sm transition-colors"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              title={article.isStarred ? "スター解除" : "スター"}
+            >
+              {article.isStarred ? "★" : "☆"}
+            </button>
+            <button
+              onClick={() => setNoteOpen((v) => !v)}
+              className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
+              style={{
+                background: note ? "var(--accent-subtle)" : "var(--card)",
+                color: note ? "var(--accent)" : "inherit",
+                border: "1px solid var(--card-border)",
+              }}
+              title={note ? "メモあり" : "メモを追加"}
+              aria-expanded={noteOpen}
+            >
+              📝 {note ? "" : "メモ"}
+            </button>
+            <button
+              onClick={() => toggle("isRead", !article.isRead)}
+              className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+            >
+              {article.isRead ? "未読に戻す" : "既読にする"}
+            </button>
+          </div>
         </div>
         {tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -293,7 +290,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange, re
             {article.aiSummaryShort}
           </p>
         )}
-        {!readOnly && noteOpen && (
+        {noteOpen && (
           <div className="mt-3">
             <textarea
               value={note}
@@ -321,11 +318,10 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange, re
 
       <div className="mx-auto max-w-3xl px-4 py-5 md:px-6 md:py-6">
         {/* AI 要約・翻訳パネル */}
-        {!readOnly && (
-          <section
-            className="mb-8 rounded-lg border p-5"
-            style={{ background: "var(--ai-bg)", borderColor: "var(--ai-border)" }}
-          >
+        <section
+          className="mb-8 rounded-lg border p-5"
+          style={{ background: "var(--ai-bg)", borderColor: "var(--ai-border)" }}
+        >
             <div className="mb-3 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-sm font-bold" style={{ color: "var(--accent)" }}>
                 <span>AI 要約・翻訳</span>
@@ -430,7 +426,6 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange, re
             </p>
           )}
         </section>
-        )}
 
         {/* 記事本文 */}
         {article.contentHtml ? (
