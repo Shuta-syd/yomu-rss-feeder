@@ -244,11 +244,17 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
             </button>
             <button
               onClick={() => toggle("isStarred", !article.isStarred)}
-              className="shrink-0 rounded-md px-2.5 py-1.5 text-sm transition-colors"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-              title={article.isStarred ? "スター解除" : "スター"}
+              className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
+              style={{
+                background: article.isStarred ? "var(--accent-subtle)" : "var(--card)",
+                border: "1px solid var(--card-border)",
+                color: article.isStarred ? "var(--accent)" : "inherit",
+              }}
+              title={article.isStarred ? "お気に入りを解除" : "お気に入りに追加"}
+              aria-pressed={article.isStarred}
             >
-              {article.isStarred ? "★" : "☆"}
+              <span className="text-sm text-yellow-500">{article.isStarred ? "★" : "☆"}</span>
+              <span className="ml-1">お気に入り</span>
             </button>
             <button
               onClick={() => setNoteOpen((v) => !v)}

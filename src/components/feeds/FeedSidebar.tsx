@@ -82,14 +82,11 @@ function SavedSitesBlock({
   }
 
   return (
-    <section className="mt-3 border-t pt-2" style={{ borderColor: "var(--card-border)" }}>
-      <div className="px-2 text-xs uppercase" style={{ color: "var(--muted)" }}>
-        Sites
-      </div>
-      <form onSubmit={addSite} className="mt-1 flex gap-1 px-2">
+    <section className="mt-2 space-y-1">
+      <form onSubmit={addSite} className="flex gap-1 px-2 py-1">
         <input
           type="url"
-          placeholder="https://example.com"
+          placeholder="サイトURL"
           value={siteUrl}
           onChange={(e) => setSiteUrl(e.target.value)}
           className="min-w-0 flex-1 rounded px-2 py-1 text-xs"
@@ -104,18 +101,14 @@ function SavedSitesBlock({
           {loading ? "…" : "追加"}
         </button>
       </form>
-      <div className="mt-1 grid gap-1 px-2">
+      <div className="grid gap-1">
         {sites.map((site) => (
-          <div
-            key={site.id}
-            className="flex min-w-0 items-center gap-1 rounded px-2 py-1 text-xs"
-            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-          >
+          <div key={site.id} className="group/site flex min-w-0 items-center gap-1">
             <a
               href={site.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex min-w-0 flex-1 items-center gap-2"
+              className="flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-[var(--accent-subtle)]"
               title={site.url}
             >
               <FeedIcon url={site.faviconUrl} title={site.title} />
@@ -125,7 +118,7 @@ function SavedSitesBlock({
               type="button"
               onClick={() => deleteSite(site)}
               disabled={deletingId === site.id}
-              className="shrink-0 rounded px-1 opacity-60 transition-opacity hover:opacity-100 disabled:opacity-30"
+              className="shrink-0 rounded px-1 text-xs opacity-50 transition-opacity hover:opacity-100 disabled:opacity-30 md:opacity-0 md:group-hover/site:opacity-70 md:hover:opacity-100"
               title="削除"
               aria-label={`${site.title}を削除`}
             >

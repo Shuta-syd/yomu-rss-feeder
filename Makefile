@@ -29,7 +29,7 @@ install: ## pnpm install (コンテナ内)
 dev: ## devコンテナ起動 → install → migrate → 開発サーバー起動 (デーモン)
 	$(COMPOSE_DEV) up -d --build
 	$(RUN) pnpm install
-	$(RUN) pnpm drizzle-kit push --force
+	$(RUN) pnpm db:migrate
 	$(RUN) sh -c 'nohup pnpm dev > /tmp/next-dev.log 2>&1 &'
 	@echo ""
 	@echo "  開発サーバー起動: http://localhost:3000"
