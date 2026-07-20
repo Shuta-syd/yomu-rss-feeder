@@ -39,36 +39,8 @@ function SavedSitesBlock({
   sites: SavedSiteDTO[];
   onSitesChanged: () => void;
 }) {
-  const [siteUrl, setSiteUrl] = useState("");
-  const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const trimmedUrl = siteUrl.trim();
-
-  async function addSite(e: React.FormEvent) {
-    e.preventDefault();
-    if (!trimmedUrl || loading) return;
-
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/sites", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: trimmedUrl }),
-      });
-      if (res.ok) {
-        setSiteUrl("");
-        onSitesChanged();
-        return;
-      }
-      if (res.status === 409) setError("このサイトは既に登録されています");
-      else if (res.status === 400) setError("URLを確認してください");
-      else setError("サイトの追加に失敗しました");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function deleteSite(site: SavedSiteDTO) {
     if (!confirm(`${site.title} を削除します。よろしいですか？`)) return;
@@ -82,26 +54,10 @@ function SavedSitesBlock({
     }
   }
 
+  if (sites.length === 0 && !error) return null;
+
   return (
     <section className="mt-2 space-y-1">
-      <form onSubmit={addSite} className="flex gap-1 px-2 py-1">
-        <input
-          type="url"
-          placeholder="サイトURL"
-          value={siteUrl}
-          onChange={(e) => setSiteUrl(e.target.value)}
-          className="min-w-0 flex-1 rounded px-2 py-1 text-xs"
-          style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-        />
-        <button
-          type="submit"
-          disabled={loading || !trimmedUrl}
-          className="shrink-0 rounded px-2 py-1 text-xs disabled:opacity-40"
-          style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-        >
-          {loading ? "…" : "追加"}
-        </button>
-      </form>
       <div className="grid gap-1">
         {sites.map((site) => (
           <div key={site.id} className="group/site flex min-w-0 items-center gap-1">

@@ -71,6 +71,17 @@ export default function FeedsPage() {
   const listPanelRef = useRef<HTMLElement>(null);
   const sidebarPanelRef = useRef<HTMLDivElement>(null);
   const sidebarOpenButtonRef = useRef<HTMLButtonElement>(null);
+  const addFeedTriggerRef = useRef<HTMLElement | null>(null);
+
+  const openAddFeedDialog = useCallback(() => {
+    addFeedTriggerRef.current = document.activeElement as HTMLElement | null;
+    setAddOpen(true);
+  }, []);
+
+  const closeAddFeedDialog = useCallback(() => {
+    setAddOpen(false);
+    window.requestAnimationFrame(() => addFeedTriggerRef.current?.focus());
+  }, []);
 
   useEffect(() => {
     const mobileMq = window.matchMedia("(max-width: 767px)");
@@ -578,7 +589,7 @@ export default function FeedsPage() {
             setSelected(null);
             finishSidebarNavigation();
           }}
-          onAddFeed={() => setAddOpen(true)}
+          onAddFeed={openAddFeedDialog}
           onSitesChanged={loadSites}
           onSync={sync}
           syncing={syncing}
@@ -760,14 +771,17 @@ export default function FeedsPage() {
         </div>
       </section>
 
-      <AddFeedDialog
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onAdded={() => {
-          loadFeeds();
-          loadInitial();
-        }}
-      />
+      {addOpen && (
+        <AddFeedDialog
+          categories={feeds.map((feed) => feed.category)}
+          initialCategory={selectedCategory}
+          onClose={closeAddFeedDialog}
+          onAdded={() => {
+            loadFeeds();
+            loadInitial();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -35,7 +35,7 @@ export async function GET() {
 
 const addSchema = z.object({
   url: z.string().url(),
-  category: z.string().min(1).max(64).optional(),
+  category: z.string().trim().min(1).max(64).optional(),
 });
 
 export async function POST(req: NextRequest) {
