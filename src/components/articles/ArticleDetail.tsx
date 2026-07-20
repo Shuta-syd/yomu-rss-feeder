@@ -197,15 +197,15 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
     : [];
 
   return (
-    <article className="h-full overflow-y-auto">
+    <article className="article-detail-container h-full w-full min-w-0 overflow-y-auto">
       {/* ヘッダー */}
       <header
-        className="border-b px-4 py-3 md:px-6 md:py-4"
+        className="min-w-0 overflow-x-hidden border-b px-4 py-3 md:px-6 md:py-4"
         style={{ background: "var(--bg)", borderColor: "var(--card-border)" }}
       >
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
+        <div className="article-detail-header-layout">
           <div className="min-w-0 flex-1">
-            <h1 className="text-base font-bold leading-snug md:text-lg">
+            <h1 className="break-words text-base font-bold leading-snug md:text-lg">
               {article.aiTitleJa ?? article.title}
             </h1>
             {article.aiTitleJa && (
@@ -232,7 +232,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
               </a>
             </div>
           </div>
-          <div className="flex shrink-0 gap-1.5 overflow-x-auto">
+          <div className="flex max-w-full shrink-0 gap-1.5 overflow-x-auto">
             <button
               onClick={runStage1}
               disabled={stage1Loading || article.aiStage1Status === "processing"}

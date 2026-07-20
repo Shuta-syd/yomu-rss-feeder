@@ -78,6 +78,77 @@ a {
   animation: slide-in-left 220ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+/* デスクトップのフィード欄: 広い画面では幅を縮め、中間幅ではドロワーとして動かす。 */
+.feed-sidebar-shell.sidebar-motion-ready {
+  transition:
+    width 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    translate 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 180ms ease-out;
+}
+.feed-sidebar-backdrop.sidebar-motion-ready {
+  transition: opacity 220ms ease-out;
+}
+
+/* 詳細ヘッダーは viewport ではなく、実際に割り当てられたペイン幅で組み替える。 */
+.article-detail-container {
+  container-name: article-detail;
+  container-type: inline-size;
+}
+.article-detail-header-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+@container article-detail (min-width: 40rem) {
+  .article-detail-header-layout {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+}
+
+/* 一覧ペイン自身の幅を基準に、ツールバーとサムネイルを調整する。 */
+.article-list-panel {
+  container-name: article-list;
+  container-type: inline-size;
+}
+@container article-list (max-width: 22.49rem) {
+  .article-list-toolbar {
+    flex-wrap: wrap;
+  }
+  .article-list-toolbar-actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+}
+@container article-list (min-width: 22.5rem) {
+  .article-list-thumbnail {
+    width: 8rem;
+    height: 6rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .article-list-thumbnail {
+    width: 6rem;
+    height: 5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed-sidebar-shell.sidebar-motion-ready,
+  .feed-sidebar-backdrop.sidebar-motion-ready {
+    transition: none;
+  }
+  .mobile-panel-forward,
+  .mobile-panel-back {
+    animation: none;
+  }
+}
+
 /* スクロールをスムーズに */
 * {
   -webkit-overflow-scrolling: touch;

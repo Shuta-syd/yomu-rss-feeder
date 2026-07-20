@@ -14,7 +14,7 @@ const Thumbnail = memo(function Thumbnail({ src }: { src: string }) {
     <img
       src={src}
       alt=""
-      className="h-20 w-24 shrink-0 rounded object-cover md:h-24 md:w-32"
+      className="article-list-thumbnail h-20 w-24 shrink-0 rounded object-cover"
       style={{ background: "var(--card)" }}
       loading="lazy"
       decoding="async"
@@ -85,7 +85,7 @@ export const ArticleList = memo(function ArticleList({ articles, selectedId, onS
 
   let prevKey: string | null = null;
   return (
-    <ul ref={scrollRef} className="h-full overflow-y-auto">
+    <ul ref={scrollRef} className="article-list-container h-full overflow-y-auto">
       {articles.flatMap((a) => {
         const curKey = dateKey(a.sortKey);
         const showHeader = curKey !== prevKey;

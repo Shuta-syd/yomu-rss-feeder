@@ -21,6 +21,7 @@ interface Props {
   onFeedsDeleted?: () => void;
   onCategoryRenamed?: (oldName: string, newName: string) => void;
   isMobile?: boolean;
+  onCollapse?: () => void;
   view?: "feeds" | "starred";
   onSelectStarred?: () => void;
 }
@@ -152,6 +153,7 @@ export function FeedSidebar({
   onFeedsDeleted,
   onCategoryRenamed,
   isMobile,
+  onCollapse,
   view = "feeds",
   onSelectStarred,
 }: Props) {
@@ -257,6 +259,7 @@ export function FeedSidebar({
     <aside
       className={`flex h-full flex-col border-r ${isMobile ? "w-full" : "w-64 shrink-0"}`}
       style={{ background: "var(--sidebar-bg)", borderColor: "var(--card-border)" }}
+      aria-label="フィード一覧"
     >
       <div className="flex items-center justify-between border-b p-3" style={{ borderColor: "var(--card-border)" }}>
         <h1 className="flex items-center gap-1.5 font-semibold">
@@ -297,10 +300,25 @@ export function FeedSidebar({
               選択モード
             </span>
           )}
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              data-sidebar-close
+              className="rounded px-2 py-1 text-xs"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              title="フィード一覧を閉じる"
+              aria-label="フィード一覧を閉じる"
+              aria-controls="feed-sidebar-panel"
+              aria-expanded="true"
+            >
+              ‹
+            </button>
+          )}
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm">
+      <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm" aria-label="フィードとカテゴリ">
         {selectMode ? (
           <label className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1">
             <input

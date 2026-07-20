@@ -16,6 +16,13 @@ import type { FeedWithUnread } from "@/types/feed";
 import type { SavedSiteDTO } from "@/types/site";
 import type { ArticleDTO } from "@/types/article";
 
+const COMPACT_DESKTOP_QUERY = "(min-width: 768px) and (max-width: 1199px)";
+const DESKTOP_SIDEBAR_STORAGE_KEY = "yomu:desktop-sidebar-expanded";
+const ARTICLE_LIST_DEFAULT_WIDTH = 384;
+const ARTICLE_LIST_MIN_WIDTH = 320;
+const ARTICLE_DETAIL_MIN_WIDTH = 420;
+const RESIZE_HANDLE_WIDTH = 4;
+
 export default function FeedsPage() {
   const router = useRouter();
   const [feeds, setFeeds] = useState<FeedWithUnread[]>([]);
@@ -34,6 +41,10 @@ export default function FeedsPage() {
   const [listWidth, setListWidth] = useState<number | null>(null);
   const [aiStatus, setAiStatus] = useState<{ pending: number; processing: number; failed: number; currentTitle: string | null; currentFeedTitle: string | null } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [isCompactDesktop, setIsCompactDesktop] = useState(false);
+  const [desktopSidebarExpanded, setDesktopSidebarExpanded] = useState(true);
+  const [compactDrawerOpen, setCompactDrawerOpen] = useState(false);
+  const [layoutReady, setLayoutReady] = useState(false);
   const [mobileView, setMobileView] = useState<"sidebar" | "list" | "detail">("list");
   const [view, setView] = useState<"feeds" | "starred">("feeds");
   const [markingRead, setMarkingRead] = useState(false);
@@ -41,6 +52,9 @@ export default function FeedsPage() {
   const [slideDirection, setSlideDirection] = useState<"forward" | "back">("forward");
   // URL からの初期状態復元が済むまで loadInitial を待たせ、既定→復元の二重 fetch を防ぐ
   const [restored, setRestored] = useState(false);
+  const desktopSidebarOpen = isCompactDesktop
+    ? compactDrawerOpen
+    : desktopSidebarExpanded;
 
   const mobileViewRef = useRef(mobileView);
   useEffect(() => {
@@ -53,22 +67,124 @@ export default function FeedsPage() {
     setMobileView(next);
   }, []);
   const resizing = useRef(false);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const listPanelRef = useRef<HTMLElement>(null);
+  const sidebarPanelRef = useRef<HTMLDivElement>(null);
+  const sidebarOpenButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const update = () => setIsMobile(mq.matches);
+    const mobileMq = window.matchMedia("(max-width: 767px)");
+    const compactMq = window.matchMedia(COMPACT_DESKTOP_QUERY);
+    let readyFrame = 0;
+    const update = () => {
+      setIsMobile(mobileMq.matches);
+      setIsCompactDesktop(compactMq.matches);
+      // 中間幅のドロワーは、ブレークポイントをまたぐたびに閉じた状態から始める。
+      if (!compactMq.matches) setCompactDrawerOpen(false);
+    };
     update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
+    readyFrame = window.requestAnimationFrame(() => setLayoutReady(true));
+    mobileMq.addEventListener("change", update);
+    compactMq.addEventListener("change", update);
+    return () => {
+      window.cancelAnimationFrame(readyFrame);
+      mobileMq.removeEventListener("change", update);
+      compactMq.removeEventListener("change", update);
+    };
   }, []);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(DESKTOP_SIDEBAR_STORAGE_KEY);
+      if (stored === "false") setDesktopSidebarExpanded(false);
+      if (stored === "true") setDesktopSidebarExpanded(true);
+    } catch {
+      // localStorage が使えない環境では、既定の開いた状態を使う。
+    }
+  }, []);
+
+  const setDesktopSidebarPreference = useCallback((expanded: boolean) => {
+    setDesktopSidebarExpanded(expanded);
+    try {
+      window.localStorage.setItem(DESKTOP_SIDEBAR_STORAGE_KEY, String(expanded));
+    } catch {
+      // 保存できなくても、このセッション中の開閉は継続する。
+    }
+  }, []);
+
+  const focusSidebarCloseButton = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      sidebarPanelRef.current
+        ?.querySelector<HTMLButtonElement>("[data-sidebar-close]")
+        ?.focus();
+    });
+  }, []);
+
+  const openDesktopSidebar = useCallback(() => {
+    if (isCompactDesktop) setCompactDrawerOpen(true);
+    else setDesktopSidebarPreference(true);
+    focusSidebarCloseButton();
+  }, [focusSidebarCloseButton, isCompactDesktop, setDesktopSidebarPreference]);
+
+  const closeDesktopSidebar = useCallback((restoreFocus = true) => {
+    if (isCompactDesktop) setCompactDrawerOpen(false);
+    else setDesktopSidebarPreference(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => sidebarOpenButtonRef.current?.focus());
+    }
+  }, [isCompactDesktop, setDesktopSidebarPreference]);
+
+  const openMobileSidebar = useCallback(() => {
+    goToMobileView("sidebar");
+    focusSidebarCloseButton();
+  }, [focusSidebarCloseButton, goToMobileView]);
+
+  const closeMobileSidebar = useCallback(() => {
+    goToMobileView("list");
+    window.requestAnimationFrame(() => sidebarOpenButtonRef.current?.focus());
+  }, [goToMobileView]);
+
+  useEffect(() => {
+    if (!isCompactDesktop || !compactDrawerOpen) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeDesktopSidebar();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeDesktopSidebar, compactDrawerOpen, isCompactDesktop]);
+
+  useEffect(() => {
+    const sidebarUnavailable = isMobile
+      ? mobileView !== "sidebar"
+      : !desktopSidebarOpen;
+    if (!sidebarUnavailable) return;
+    if (!sidebarPanelRef.current?.contains(document.activeElement)) return;
+    const frame = window.requestAnimationFrame(() => {
+      sidebarOpenButtonRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [desktopSidebarOpen, isMobile, mobileView]);
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
       if (!resizing.current) return;
-      const sidebar = document.querySelector("aside");
-      const sidebarWidth = sidebar?.offsetWidth ?? 256;
-      const newWidth = e.clientX - sidebarWidth;
-      setListWidth(Math.max(240, Math.min(newWidth, 800)));
+      const listPanel = listPanelRef.current;
+      const listLeft = listPanel?.getBoundingClientRect().left ?? 0;
+      const layoutRight = layoutRef.current?.getBoundingClientRect().right ?? window.innerWidth;
+      const availableWidth = Math.max(
+        ARTICLE_LIST_MIN_WIDTH,
+        layoutRight - listLeft - ARTICLE_DETAIL_MIN_WIDTH - RESIZE_HANDLE_WIDTH,
+      );
+      const cssMaxWidth = listPanel
+        ? Number.parseFloat(window.getComputedStyle(listPanel).maxWidth)
+        : availableWidth;
+      const maxWidth = Number.isFinite(cssMaxWidth)
+        ? Math.min(availableWidth, cssMaxWidth)
+        : availableWidth;
+      const newWidth = e.clientX - listLeft;
+      setListWidth(Math.max(ARTICLE_LIST_MIN_WIDTH, Math.min(newWidth, maxWidth)));
     }
     function onMouseUp() {
       resizing.current = false;
@@ -403,12 +519,45 @@ export default function FeedsPage() {
   const showList = !isMobile || mobileView === "list";
   const showDetail = !isMobile || mobileView === "detail";
   const slideClass = isMobile ? (slideDirection === "forward" ? "mobile-panel-forward" : "mobile-panel-back") : "";
+  // 広幅時は閉じている間も同じ上限を使い、開閉アニメーション中に一覧幅が跳ねないようにする。
+  const sidebarReservedWidth = isCompactDesktop ? 0 : 256;
+  const desktopListMaxWidth = `calc(100vw - ${sidebarReservedWidth + ARTICLE_DETAIL_MIN_WIDTH + RESIZE_HANDLE_WIDTH}px)`;
+  const compactDrawerModal = !isMobile && isCompactDesktop && compactDrawerOpen;
+  const sidebarShellClass = isMobile
+    ? showSidebar
+      ? `w-full ${slideClass}`
+      : "hidden"
+    : isCompactDesktop
+      ? `absolute inset-y-0 left-0 z-30 h-full w-64 shadow-2xl ${desktopSidebarOpen ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-full opacity-0"}`
+      : `h-full shrink-0 overflow-hidden ${desktopSidebarOpen ? "w-64 opacity-100" : "pointer-events-none w-0 opacity-0"}`;
+
+  function finishSidebarNavigation() {
+    if (isMobile) goToMobileView("list");
+    else if (isCompactDesktop) closeDesktopSidebar();
+  }
 
   return (
-    <div className="flex h-screen">
+    <div
+      ref={layoutRef}
+      className={`relative flex h-screen min-w-0 overflow-hidden ${layoutReady ? "visible" : "invisible"}`}
+    >
+      {!isMobile && isCompactDesktop && (
+        <div
+          className={`feed-sidebar-backdrop absolute inset-0 z-20 bg-black/35 ${desktopSidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"} ${layoutReady ? "sidebar-motion-ready" : ""}`}
+          onClick={() => closeDesktopSidebar()}
+          aria-hidden="true"
+        />
+      )}
       <div
+        ref={sidebarPanelRef}
+        id="feed-sidebar-panel"
         key={isMobile ? `sb-${mobileView}` : "sb"}
-        className={`${showSidebar ? (isMobile ? `w-full ${slideClass}` : "") : "hidden"}`}
+        className={`feed-sidebar-shell ${sidebarShellClass} ${layoutReady ? "sidebar-motion-ready" : ""}`}
+        aria-hidden={!isMobile && !desktopSidebarOpen ? true : undefined}
+        inert={!isMobile && !desktopSidebarOpen ? true : undefined}
+        role={compactDrawerModal ? "dialog" : undefined}
+        aria-modal={compactDrawerModal ? true : undefined}
+        aria-label={compactDrawerModal ? "フィード一覧" : undefined}
       >
         <FeedSidebar
           feeds={feeds}
@@ -420,14 +569,14 @@ export default function FeedsPage() {
             setSelectedFeedId(id);
             setSelectedCategory(null);
             setSelected(null);
-            if (isMobile) goToMobileView("list");
+            finishSidebarNavigation();
           }}
           onSelectCategory={(category) => {
             setView("feeds");
             setSelectedFeedId(null);
             setSelectedCategory(category);
             setSelected(null);
-            if (isMobile) goToMobileView("list");
+            finishSidebarNavigation();
           }}
           onAddFeed={() => setAddOpen(true)}
           onSitesChanged={loadSites}
@@ -446,31 +595,60 @@ export default function FeedsPage() {
             setSelectedCategory((cur) => (cur === oldName ? newName : cur));
           }}
           isMobile={isMobile}
+          onCollapse={isMobile
+            ? closeMobileSidebar
+            : () => closeDesktopSidebar()}
           view={view}
           onSelectStarred={() => {
             setView("starred");
             setSelectedFeedId(null);
             setSelectedCategory(null);
             setSelected(null);
-            if (isMobile) goToMobileView("list");
+            finishSidebarNavigation();
           }}
         />
       </div>
       <section
+        ref={listPanelRef}
         key="list"
-        className={`${showList ? "flex" : "hidden"} ${isMobile ? `w-full ${mobileView === "list" ? slideClass : ""}` : `shrink-0 ${listWidth === null ? "w-96" : ""}`} flex-col`}
-        style={!isMobile && listWidth !== null ? { width: listWidth } : undefined}
+        className={`article-list-panel ${showList ? "flex" : "hidden"} ${isMobile ? `w-full ${mobileView === "list" ? slideClass : ""}` : "min-w-0 shrink-0"} flex-col`}
+        style={!isMobile ? {
+          width: listWidth ?? ARTICLE_LIST_DEFAULT_WIDTH,
+          minWidth: ARTICLE_LIST_MIN_WIDTH,
+          maxWidth: desktopListMaxWidth,
+        } : undefined}
+        inert={compactDrawerModal ? true : undefined}
+        aria-hidden={compactDrawerModal ? true : undefined}
       >
         <div
-          className="flex items-center gap-2 border-b p-2"
+          className="article-list-toolbar flex items-center gap-2 border-b p-2"
           style={{ borderColor: "var(--card-border)" }}
         >
           {isMobile && (
             <button
-              onClick={() => goToMobileView("sidebar")}
+              ref={sidebarOpenButtonRef}
+              type="button"
+              onClick={openMobileSidebar}
               className="shrink-0 rounded px-2 py-1 text-sm"
               style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-              aria-label="フィード一覧"
+              aria-label="フィード一覧を開く"
+              aria-controls="feed-sidebar-panel"
+              aria-expanded="false"
+            >
+              ☰
+            </button>
+          )}
+          {!isMobile && !desktopSidebarOpen && (
+            <button
+              ref={sidebarOpenButtonRef}
+              type="button"
+              onClick={openDesktopSidebar}
+              className="shrink-0 rounded px-2 py-1 text-sm"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              aria-label="フィード一覧を開く"
+              aria-controls="feed-sidebar-panel"
+              aria-expanded="false"
+              title="フィード一覧を開く"
             >
               ☰
             </button>
@@ -480,29 +658,31 @@ export default function FeedsPage() {
             placeholder="検索..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="min-w-0 flex-1 rounded px-2 py-1 text-sm"
+            className="article-list-search min-w-0 flex-1 rounded px-2 py-1 text-sm"
             style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
           />
-          <ReadFilterToggle value={readFilter} onChange={setReadFilter} />
-          <button
-            onClick={markAllRead}
-            disabled={markingRead || articles.every((a) => a.isRead)}
-            className="shrink-0 rounded px-2 py-1 text-sm disabled:opacity-40"
-            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-            title="表示中をすべて既読"
-            aria-label="表示中をすべて既読"
-          >
-            {markingRead ? "…" : "✓"}
-          </button>
-          <ThemeToggle />
-          <a
-            href="/settings"
-            className="shrink-0 rounded px-2 py-1 text-sm"
-            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-            aria-label="設定"
-          >
-            ⚙
-          </a>
+          <div className="article-list-toolbar-actions flex shrink-0 items-center gap-2">
+            <ReadFilterToggle value={readFilter} onChange={setReadFilter} />
+            <button
+              onClick={markAllRead}
+              disabled={markingRead || articles.every((a) => a.isRead)}
+              className="shrink-0 rounded px-2 py-1 text-sm disabled:opacity-40"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              title="表示中をすべて既読"
+              aria-label="表示中をすべて既読"
+            >
+              {markingRead ? "…" : "✓"}
+            </button>
+            <ThemeToggle />
+            <a
+              href="/settings"
+              className="shrink-0 rounded px-2 py-1 text-sm"
+              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              aria-label="設定"
+            >
+              ⚙
+            </a>
+          </div>
         </div>
         {/* バッチ処理中はバナーを出し続け、ポーリングごとの出没でレイアウトが上下しないようにする */}
         {aiStatus && (aiStatus.processing > 0 || aiStatus.pending > 0) && (
@@ -552,7 +732,9 @@ export default function FeedsPage() {
       )}
       <section
         key={isMobile ? `detail-${mobileView}` : "detail"}
-        className={`${showDetail ? "flex" : "hidden"} ${isMobile ? `w-full ${slideClass}` : "flex-1"} flex-col overflow-hidden`}
+        className={`${showDetail ? "flex" : "hidden"} ${isMobile ? `w-full ${slideClass}` : "min-w-0 flex-1"} flex-col overflow-hidden`}
+        inert={compactDrawerModal ? true : undefined}
+        aria-hidden={compactDrawerModal ? true : undefined}
       >
         {isMobile && (
           <div

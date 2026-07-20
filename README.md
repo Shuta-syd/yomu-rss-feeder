@@ -132,3 +132,22 @@ make lint       # eslint
 make check      # lint + typecheck + test
 make db-studio  # Drizzle Studio
 ```
+
+### ローカルUI QA
+
+本番の認証情報やDBを変更せず、ローカル専用の複製DBでログインQAできる。
+
+```bash
+cp .env.qa.example .env.qa.local
+chmod 600 .env.qa.local
+# .env.qa.local の YOMU_QA_PASSWORD と ENCRYPTION_KEY を設定
+pnpm qa:setup
+pnpm qa:dev
+# 別ターミナルでログイン・認証APIを確認
+pnpm qa:smoke
+```
+
+`qa:setup` は初回のみ `data/yomu.db` を `data/yomu-qa.db` に複製し、
+QA側のUID・パスワードだけを `.env.qa.local` の値へ変更する。元DBは変更せず、
+複製先のセッションとLLM APIキーは削除される。
+QA用DB、認証情報、セッションはGitへコミットしない。
