@@ -1,9 +1,15 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { articles } from "../db/schema";
+import { articles, feeds } from "../db/schema";
 import { getSettings } from "../settings";
 import { createProvider, LLMBlockedError, LLMNoApiKeyError } from "./provider";
-import { STAGE1_SYSTEM, STAGE1_SYSTEM_JP, stage1UserPrompt, isJapaneseTitle } from "./prompts";
+import {
+  STAGE1_SYSTEM,
+  STAGE1_SYSTEM_JP,
+  stage1UserPrompt,
+  isJapaneseTitle,
+  composeStage1System,
+} from "./prompts";
 import { parseAndValidate, stage1Schema } from "./parse-response";
 
 const BATCH_TIMEOUT_MS = 5 * 60 * 1000;
@@ -27,13 +33,14 @@ export async function processStage1ForArticles(articleIds: string[]): Promise<vo
   if (!provider) return;
 
   const rows = db
-    .select()
+    .select({ article: articles, summaryLens: feeds.summaryLens })
     .from(articles)
+    .innerJoin(feeds, eq(articles.feedId, feeds.id))
     .where(and(inArray(articles.id, articleIds), eq(articles.aiStage1Status, "pending")))
     .all();
 
   const start = Date.now();
-  for (const article of rows) {
+  for (const { article, summaryLens } of rows) {
     if (Date.now() - start > BATCH_TIMEOUT_MS) {
       console.warn("[yomu] stage1: batch timeout");
       break;
@@ -47,7 +54,7 @@ export async function processStage1ForArticles(articleIds: string[]): Promise<vo
     try {
       const isJp = isJapaneseTitle(article.title);
       const result = await provider.chat({
-        systemPrompt: isJp ? STAGE1_SYSTEM_JP : STAGE1_SYSTEM,
+        systemPrompt: composeStage1System(isJp ? STAGE1_SYSTEM_JP : STAGE1_SYSTEM, summaryLens),
         userPrompt: stage1UserPrompt(article.title, article.contentPlain ?? ""),
       });
       const parsed = parseAndValidate(result.content, stage1Schema);

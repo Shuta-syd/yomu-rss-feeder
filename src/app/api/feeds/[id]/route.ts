@@ -10,6 +10,7 @@ const updateSchema = z.object({
   category: z.string().min(1).max(64).optional(),
   fetchIntervalMin: z.number().int().min(5).max(1440).optional(),
   aiEnabled: z.boolean().optional(),
+  summaryLens: z.string().max(2000).nullable().optional(),
 });
 
 export async function PUT(

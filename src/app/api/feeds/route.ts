@@ -23,6 +23,7 @@ export async function GET() {
         lastFetchError: feeds.lastFetchError,
         consecutiveFetchFailures: feeds.consecutiveFetchFailures,
         aiEnabled: feeds.aiEnabled,
+        summaryLens: feeds.summaryLens,
         unreadCount: sql<number>`COALESCE(SUM(CASE WHEN ${articles.isRead} = 0 THEN 1 ELSE 0 END), 0)`,
       })
       .from(feeds)

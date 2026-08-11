@@ -21,6 +21,7 @@ export const feeds = sqliteTable(
     lastFetchError: text("last_fetch_error"),
     consecutiveFetchFailures: integer("consecutive_fetch_failures").notNull().default(0),
     aiEnabled: integer("ai_enabled", { mode: "boolean" }).notNull().default(true),
+    summaryLens: text("summary_lens"),
     createdAt: integer("created_at")
       .notNull()
       .$defaultFn(() => Date.now()),

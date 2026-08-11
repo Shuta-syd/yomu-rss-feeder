@@ -34,6 +34,22 @@ export function stage1UserPrompt(title: string, contentPlain: string): string {
 }
 
 /**
+ * フィード固有の視点 (summaryLens) を stage1 システムプロンプトに合成する。
+ * lens が未設定・空白のみの場合は base をそのまま返す。
+ * lens の指示は基本ルールより優先される (タグ語彙や要約観点の差し替えを想定)。
+ * 出力フォーマット (JSON) は base 側の定義を維持する。
+ */
+export function composeStage1System(base: string, lens: string | null | undefined): string {
+  const trimmed = lens?.trim();
+  if (!trimmed) return base;
+  return `${base}
+
+# フィード固有の視点 (上記の基本ルールより優先する)
+${trimmed}
+出力フォーマット (JSON) は変えないこと。`;
+}
+
+/**
  * タイトルが日本語主体かどうかを判定する。
  * ひらがな・カタカナ・漢字の文字数が英字の文字数を上回ればtrue。
  */

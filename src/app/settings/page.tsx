@@ -68,6 +68,7 @@ interface FeedForSettings {
   title: string;
   category: string;
   aiEnabled: boolean;
+  summaryLens: string | null;
   faviconUrl: string | null;
 }
 
@@ -112,6 +113,8 @@ export default function SettingsPage() {
   const [pwSaving, setPwSaving] = useState(false);
   const [feedList, setFeedList] = useState<FeedForSettings[]>([]);
   const [feedFilter, setFeedFilter] = useState("");
+  const [lensEditingId, setLensEditingId] = useState<string | null>(null);
+  const [lensDraft, setLensDraft] = useState("");
 
   const loadFeedList = async () => {
     const res = await fetch("/api/feeds");
@@ -123,10 +126,36 @@ export default function SettingsPage() {
         title: f.title,
         category: f.category,
         aiEnabled: Boolean(f.aiEnabled),
+        summaryLens: f.summaryLens ?? null,
         faviconUrl: f.faviconUrl ?? null,
       })),
     );
   };
+
+  function toggleLensEditor(f: FeedForSettings) {
+    if (lensEditingId === f.id) {
+      setLensEditingId(null);
+      return;
+    }
+    setLensEditingId(f.id);
+    setLensDraft(f.summaryLens ?? "");
+  }
+
+  async function saveFeedLens(id: string) {
+    const lens = lensDraft.trim() === "" ? null : lensDraft.trim();
+    const res = await fetch(`/api/feeds/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ summaryLens: lens }),
+    });
+    if (!res.ok) {
+      setToast("更新に失敗しました");
+      return;
+    }
+    setFeedList((prev) => prev.map((f) => (f.id === id ? { ...f, summaryLens: lens } : f)));
+    setLensEditingId(null);
+    setToast(lens ? "視点を保存しました" : "視点を解除しました");
+  }
 
   async function toggleFeedAi(id: string, next: boolean) {
     setFeedList((prev) => prev.map((f) => (f.id === id ? { ...f, aiEnabled: next } : f)));
@@ -541,22 +570,68 @@ export default function SettingsPage() {
                     .map((f) => (
                       <li
                         key={f.id}
-                        className="flex items-center gap-3 border-b px-3 py-2 text-sm last:border-b-0"
+                        className="border-b last:border-b-0"
                         style={{ borderColor: "var(--card-border)" }}
                       >
-                        <label className="flex flex-1 cursor-pointer items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={f.aiEnabled}
-                            onChange={(e) => toggleFeedAi(f.id, e.target.checked)}
-                            className="h-4 w-4"
-                          />
-                          <FeedIcon url={f.faviconUrl} title={f.title} size="md" />
-                          <span className="min-w-0 flex-1 truncate">{f.title}</span>
-                          <span className="shrink-0 text-xs" style={{ color: "var(--muted)" }}>
-                            {f.category}
-                          </span>
-                        </label>
+                        <div className="flex items-center gap-3 px-3 py-2 text-sm">
+                          <label className="flex flex-1 cursor-pointer items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={f.aiEnabled}
+                              onChange={(e) => toggleFeedAi(f.id, e.target.checked)}
+                              className="h-4 w-4"
+                            />
+                            <FeedIcon url={f.faviconUrl} title={f.title} size="md" />
+                            <span className="min-w-0 flex-1 truncate">{f.title}</span>
+                            <span className="shrink-0 text-xs" style={{ color: "var(--muted)" }}>
+                              {f.category}
+                            </span>
+                          </label>
+                          <button
+                            onClick={() => toggleLensEditor(f)}
+                            className="shrink-0 rounded-md px-2 py-1 text-xs"
+                            style={{
+                              background: "var(--bg)",
+                              border: "1px solid var(--card-border)",
+                              color: f.summaryLens ? "var(--accent)" : "var(--muted)",
+                            }}
+                            title="AI要約の視点 (このフィード固有の要約指示)"
+                          >
+                            視点{f.summaryLens ? " ✓" : ""}
+                          </button>
+                        </div>
+                        {lensEditingId === f.id && (
+                          <div className="space-y-2 px-3 pb-3">
+                            <textarea
+                              value={lensDraft}
+                              onChange={(e) => setLensDraft(e.target.value)}
+                              rows={5}
+                              maxLength={2000}
+                              placeholder={"例: summary は次の観点で要約する:\n①何が確定した変化か (施行日・数値を含める)\n②誰が困り、誰が金を払うか\nタグは以下から最大3つ選ぶ: 制度改正, 補助金公募, ..."}
+                              className={`${inputCls} w-full font-mono text-xs`}
+                              style={inputStyle}
+                            />
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => saveFeedLens(f.id)}
+                                className="rounded-md px-3 py-1.5 text-xs"
+                                style={primaryBtnStyle}
+                              >
+                                保存
+                              </button>
+                              <button
+                                onClick={() => setLensEditingId(null)}
+                                className="rounded-md px-3 py-1.5 text-xs"
+                                style={{ background: "var(--bg)", border: "1px solid var(--card-border)" }}
+                              >
+                                キャンセル
+                              </button>
+                              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                                空にして保存すると解除。新着記事の Stage1 要約から適用されます
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </li>
                     ))}
                 </ul>
