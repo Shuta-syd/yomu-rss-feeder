@@ -81,13 +81,10 @@ export function rowToArticle(row: Record<string, unknown>): ArticleWithFeed {
   };
 }
 
-export function listArticles(params: ArticleListParams): ArticleListResult {
-  const limit = Math.min(params.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+/** Shared scope for ordinary search and Jev; no keyword prefilter. */
+function articleScope(params: ArticleListParams) {
   const where: string[] = [];
   const values: unknown[] = [];
-  let orderSql = "a.sort_key DESC, a.id DESC";
-  const orderValues: unknown[] = [];
-
   if (params.feedId) {
     where.push("a.feed_id = ?");
     values.push(params.feedId);
@@ -111,6 +108,29 @@ export function listArticles(params: ArticleListParams): ArticleListResult {
     where.push("a.is_starred = ?");
     values.push(params.isStarred ? 1 : 0);
   }
+  return { where, values };
+}
+
+export type SearchTitle = { id: string; title: string };
+export function listSearchTitles(params: ArticleListParams): SearchTitle[] {
+  const {where, values} = articleScope(params);
+  return rawDb.prepare(`SELECT a.id, a.title FROM articles a ${where.length ? 'WHERE '+where.join(' AND ') : ''} ORDER BY a.id`).all(...values) as SearchTitle[];
+}
+export function searchArticleText(ids: string[]) {
+  return rawDb.prepare(`SELECT id, title, ai_summary_short AS summary, content_plain AS content FROM articles WHERE id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(ids)) as {id:string;title:string;summary:string|null;content:string|null}[];
+}
+export function matchingSearchIds(params: ArticleListParams, ids: string[]): Set<string> {
+  const {where, values} = articleScope(params);
+  where.push('a.id IN (SELECT value FROM json_each(?))'); values.push(JSON.stringify(ids));
+  return new Set((rawDb.prepare(`SELECT a.id FROM articles a WHERE ${where.join(' AND ')}`).all(...values) as {id:string}[]).map(a=>a.id));
+}
+
+export function listArticles(params: ArticleListParams): ArticleListResult {
+  const limit = Math.min(params.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+  const {where, values} = articleScope(params);
+  let orderSql = "a.sort_key DESC, a.id DESC";
+  const orderValues: unknown[] = [];
+
   if (params.search && params.search.trim()) {
     const term = params.search.trim().replace(/"/g, '""');
     where.push(

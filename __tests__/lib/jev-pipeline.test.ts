@@ -3,9 +3,10 @@ import {createTestDb} from '../helpers/test-db';
 let database:ReturnType<typeof createTestDb>;
 vi.mock('@/lib/db',()=>({get rawDb(){return database.raw},get db(){return database.db}}));
 import {updateSettings} from '@/lib/settings';
-import {searchWithJev} from '@/lib/jev-search';
+let searchWithJev:typeof import('@/lib/jev-search').searchWithJev;
 beforeAll(()=>{database=createTestDb();vi.stubEnv('ENCRYPTION_KEY','ab'.repeat(32));});
-beforeEach(()=>{
+beforeEach(async()=>{
+ vi.resetModules();({searchWithJev}=await import('@/lib/jev-search'));
  database.raw.exec('DELETE FROM articles; DELETE FROM feeds; DELETE FROM app_config; DELETE FROM ai_usage;');
  updateSettings({jevApiKey:crypto.randomUUID(),jevSearchEnabled:true,geminiApiKey:'fake-key'});
  database.raw.exec("INSERT INTO feeds(id,title,url,created_at) VALUES('f','Feed','https://example.com/feed',1)");
@@ -23,8 +24,8 @@ function remote(mode='ok'){
   if(mode==='offline')return Response.json({error:'private upstream detail'},{status:429});
   const body=JSON.parse(String(init.body));
   const answers=Object.fromEntries(Object.keys(body.questions).map(key=>{
-   const doc=body.state.articles.find((a:{id:string})=>body.questions[key].instructions.includes(a.id));
-   return [key,{type:'score',score:doc?.id==='old'?2.9:doc?.id==='new'?2.5:0.2,legend:{'0':'unrelated','1':'tangential','2':'relevant','3':'direct'},probabilities:{'0':0,'1':0,'2':0,'3':1},confidence:1}];
+   const doc=body.state.articles[Number(key.split('_')[1])];
+   return [key,{type:'score',score:doc?.title==='候補者の見極め方'?2.9:doc?.title==='採用面談で聞く質問'?2.5:0.2,legend:{'0':'unrelated','1':'tangential','2':'relevant','3':'direct'},probabilities:{'0':0,'1':0,'2':0,'3':1},confidence:1}];
   }));
   if(mode==='invalid')delete answers[Object.keys(answers)[0]!];
   return Response.json({model:'jev-1.13.0',answers,usage:{input_tokens:200,output_tokens:20}});
@@ -56,9 +57,9 @@ it('rejects partial responses instead of treating missing judgments as unrelated
 });
 it('returns zero results without Jev calls when no candidates exist',async()=>{
  database.raw.exec('DELETE FROM articles');const calls=remote();
- expect((await searchWithJev({search:'面接について'})).articles).toEqual([]);expect(calls()).toBe(1);
+ expect((await searchWithJev({search:'面接について'})).articles).toEqual([]);expect(calls()).toBe(0);
 });
-it('requires a key before spending on query expansion',async()=>{
+it('requires a key before spending on title judgments',async()=>{
  updateSettings({jevApiKey:null});const calls=remote();await expect(searchWithJev({search:'面接について'})).rejects.toThrow();expect(calls()).toBe(0);
 });
 it('does not skip the next result if the previous page becomes read',async()=>{
@@ -77,11 +78,11 @@ it('coalesces simultaneous identical searches',async()=>{
 });
 it('expires a cursor instead of repeating paid work for a stale page',async()=>{
  const calls=remote();const first=await searchWithJev({search:'面接について',limit:1});const before=calls();
- const now=Date.now();const clock=vi.spyOn(Date,'now').mockReturnValue(now+6*60_000);
+ const now=Date.now();const clock=vi.spyOn(Date,'now').mockReturnValue(now+31*60_000);
  try { await expect(searchWithJev({search:'面接について',cursor:first.nextCursor!})).rejects.toThrow('有効期限');expect(calls()).toBe(before); }
  finally {clock.mockRestore();}
 });
-it('releases the pending search slot and usage reservation after expansion cancellation',async()=>{
+it('releases the pending search slot and usage reservation after request cancellation',async()=>{
  const timeout=vi.spyOn(AbortSignal,'timeout').mockImplementation(()=>AbortSignal.abort(new Error('deadline fixture')));
  vi.stubGlobal('fetch',async(_url:string,init:RequestInit)=>{init.signal?.throwIfAborted();throw new Error('should abort');});
  try {await expect(searchWithJev({search:'面接について'})).rejects.toThrow();}

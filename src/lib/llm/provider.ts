@@ -11,7 +11,7 @@ export interface ChatParams {
   userPrompt: string;
   temperature?: number;
   maxOutputTokens?: number;
-  purpose?: "summary_classification" | "classification" | "detail" | "search_expansion" | "search_relevance";
+  purpose?: "summary_classification" | "classification" | "detail" | "search_expansion" | "search_titles" | "search_relevance";
   onUsage?: (usage: Usage) => void;
 }
 

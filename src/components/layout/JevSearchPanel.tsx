@@ -36,7 +36,7 @@ export function JevSearchPanel() {
     </label>
     <label className="block text-sm" htmlFor="jev-api-key">TypeSafe APIキー {configured ? '（登録済み）' : '（未登録）'}</label>
     <input id="jev-api-key" type="password" autoComplete="new-password" value={key} disabled={!ready || busy} onChange={e=>setKey(e.target.value)} placeholder={configured ? '変更するときだけ入力' : 'TypeSafeのAPIキーを入力'} className="w-full rounded border px-3 py-2" style={{background:'var(--bg)',borderColor:'var(--card-border)'}}/>
-    <p className="text-xs" style={{color:'var(--muted)'}}>候補探しには下のStage1のAI設定を使い、Jevには検索文と候補記事のタイトル・要約・本文の一部を送信します。両方の利用料をAI予算に含めます。OFFにすると従来の全文検索を使います。</p>
+    <p className="text-xs" style={{color:'var(--muted)'}}>選択した全フィード・カテゴリ・フィード内の全タイトルをJevで判定し、候補の要約と本文抜粋を追加確認します。検索にStage1のAIは使いません。Jev利用料はAI予算に含め、同じ条件の判定は30分間再利用します。タイトルから分からない話題は見逃す場合があります。OFFにすると従来の全文検索を使います。</p>
     <div className="flex gap-3"><button type="button" disabled={!ready || busy} onClick={()=>void save()} className="rounded px-4 py-2" style={{background:'var(--accent)',color:'white'}}>{busy ? '保存中…' : '検索設定を保存'}</button>
     {configured && <button type="button" disabled={busy} onClick={()=>void save(true)} className="underline px-2">キーを削除</button>}</div>
     {message && <p role={error ? 'alert' : 'status'} className="text-sm">{message}</p>}

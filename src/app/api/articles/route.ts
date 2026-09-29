@@ -32,11 +32,11 @@ export async function GET(req: NextRequest) {
     const useJev = Boolean(params.search?.trim()) && getSettings().jevSearchEnabled && sp.get("searchMode") !== "keyword";
     if (!useJev && params.cursor?.startsWith("jev:")) return NextResponse.json({error:"検索方式が変わりました。もう一度検索してください。"},{status:409});
     try {
-      const result = useJev ? await searchWithJev(params) : listArticles(params);
-      return NextResponse.json(result, {headers:{"Cache-Control":"no-store"}});
+      const result = useJev ? await searchWithJev(params, {incremental:true, jobId:sp.get("searchJob") ?? undefined}) : listArticles(params);
+      return NextResponse.json(result, {status:"pending" in result && result.pending ? 202 : 200, headers:{"Cache-Control":"no-store"}});
     } catch (error) {
       if (!useJev) throw error;
-      const message = error instanceof JevSearchError || error instanceof LLMBudgetError ? error.message : "Jev検索を完了できませんでした。設定の候補検索用AIとAPIキーを確認するか、通常検索を使ってください。";
+      const message = error instanceof JevSearchError || error instanceof LLMBudgetError ? error.message : "Jev検索を完了できませんでした。JevのAPIキーを確認するか、通常検索を使ってください。";
       return NextResponse.json({error:message}, {status:error instanceof JevSearchError ? error.status : 503});
     }
   });

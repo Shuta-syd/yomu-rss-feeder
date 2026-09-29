@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {SearchLoading} from "@/components/feeds/SearchLoading";
+import type {JevSearchProgress} from "@/lib/jev-search";
 import {UpdateStatusPanel} from "@/components/feeds/UpdateStatusPanel";
 import type {AIUpdateStatus} from "@/lib/update-status";
 import { FeedSidebar } from "@/components/feeds/FeedSidebar";
@@ -60,7 +62,7 @@ export default function FeedsPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [jevEnabled, setJevEnabled] = useState(false);
-  const [searchInfo, setSearchInfo] = useState<{mode: string; candidateCount: number; candidateTotal: number} | null>(null);
+  const [searchInfo, setSearchInfo] = useState<JevSearchProgress | null>(null);
   useEffect(() => { setSearchDraft(search); }, [search]);
   const [listWidth, setListWidth] = useState<number | null>(null);
   const [aiStatus, setAiStatus] = useState<AIUpdateStatus | null>(null);
@@ -277,18 +279,27 @@ export default function FeedsPage() {
       readFilter,
     });
     try {
-      const res = await fetch(`/api/articles?${params}`, { signal: ctrl.signal });
-      if (ctrl.signal.aborted) return;
-      if (res.status === 401) {
-        router.replace("/login");
+      while (!ctrl.signal.aborted) {
+        const res = await fetch(`/api/articles?${params}`, { signal: ctrl.signal });
+        if (ctrl.signal.aborted) return;
+        if (res.status === 401) { router.replace("/login"); return; }
+        const data = await res.json();
+        if (ctrl.signal.aborted) return;
+        if (!res.ok) { setSearchError(data.error ?? "記事を取得できませんでした。"); return; }
+        setSearchInfo(data.search ?? null);
+        if (res.status === 202 && data.pending && data.search?.jobId) {
+          params.set("searchJob", data.search.jobId);
+          await new Promise<void>((resolve, reject) => {
+            const abort = () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); };
+            const timer = setTimeout(() => { ctrl.signal.removeEventListener("abort", abort); resolve(); }, 500);
+            ctrl.signal.addEventListener("abort", abort, {once:true});
+          });
+          continue;
+        }
+        setArticles(data.articles);
+        setNextCursor(data.nextCursor ?? null);
         return;
       }
-      const data = await res.json();
-      if (ctrl.signal.aborted) return;
-      if (!res.ok) { setSearchError(data.error ?? "記事を取得できませんでした。"); return; }
-      setArticles(data.articles);
-      setNextCursor(data.nextCursor ?? null);
-      setSearchInfo(data.search ?? null);
     } catch (e) {
       if (!ctrl.signal.aborted && (e as Error).name !== "AbortError") setSearchError("通信できませんでした。再試行してください。");
     } finally {
@@ -767,7 +778,7 @@ export default function FeedsPage() {
             onChange={(e) => { setSearchDraft(e.target.value); if (!e.target.value) { setSearch(""); setKeywordOverride(false); } }}
             className="reader-search-input"
           />
-          <button type="submit" className="reader-icon-button" aria-label="検索を実行" title="検索を実行"><ReaderIcon name="search"/></button>
+          <button type="submit" disabled={searchLoading} className="reader-icon-button disabled:opacity-50" aria-label="検索を実行" title="検索を実行"><ReaderIcon name="search"/></button>
           </form>
           </div>
           <div className="reader-toolbar-actions">
@@ -792,12 +803,14 @@ export default function FeedsPage() {
           </div>
         </div>
         {(searchLoading || searchError || search.trim()) && <div className="border-b px-4 py-2 text-sm" style={{borderColor:"var(--card-border)"}}>
-          {searchLoading ? <p role="status">{search.trim() && jevEnabled && !keywordOverride ? "関連する記事を探しています…" : "読み込み中…"}</p> : null}
+          {search.trim() && <p className="text-xs" style={{color:"var(--muted)"}}>検索範囲：{selectedFeedId ? feeds.find(f=>f.id===selectedFeedId)?.title ?? "選択したフィード" : selectedCategory ?? "全フィード"} · 現在の絞り込み条件を適用</p>}
+          {searchLoading && <SearchLoading progress={searchInfo} semantic={Boolean(search.trim() && jevEnabled && !keywordOverride)} onCancel={()=>{abortRef.current?.abort();setSearchLoading(false);setSearchError("検索を中断しました。30分以内なら完了した判定から再開できます。");}}/>}
           {searchError ? <p role="alert">{searchError}</p> : null}
-          {!searchLoading && searchInfo?.mode === "jev" && <p role="status">Jev検索 · 関連度順 · 候補{searchInfo.candidateCount}件を判定{searchInfo.candidateTotal > searchInfo.candidateCount ? `（候補全${searchInfo.candidateTotal}件のうち上位を検索）` : ""}</p>}
+          {!searchLoading && searchInfo?.stage === "done" && <p role="status">Jev検索 · 関連度順 · タイトル{searchInfo.titleChecked.toLocaleString()}件／候補{searchInfo.bodyChecked.toLocaleString()}件を確認</p>}
+          {search.trim() && jevEnabled && !keywordOverride && <p className="mt-1 text-xs" style={{color:"var(--muted)"}}>全タイトルから候補を選び、要約・本文抜粋で確認します。全フィードの検索には時間と利用料がかかります。フィード・カテゴリで範囲を絞れます。</p>}
           {search.trim() && jevEnabled && !keywordOverride && <button type="button" className="underline py-2" onClick={()=>setKeywordOverride(true)}>この検索を通常検索に切り替える</button>}
           {search.trim() && jevEnabled && keywordOverride && <button type="button" className="underline py-2" onClick={()=>setKeywordOverride(false)}>Jev検索に戻す</button>}
-          {(searchError || loadMoreError) && <button type="button" className="underline py-2 ml-3" onClick={()=>void loadInitial()}>最初から再検索</button>}
+          {(searchError || loadMoreError) && <button type="button" className="underline py-2 ml-3" onClick={()=>void loadInitial()}>再試行</button>}
         </div>}
         {view === "later" && <div className="flex items-center gap-2 border-b px-4 py-3 text-sm" style={{borderColor:"var(--card-border)",color:"var(--accent)"}}><ReaderIcon name="bookmark"/><h2 className="font-semibold">あとで読む</h2><span className="ml-auto text-xs">{readLaterCount}件保存</span></div>}
         <ClassificationFilters
@@ -810,7 +823,7 @@ export default function FeedsPage() {
         />
         <UpdateStatusPanel syncError={syncError} ai={aiStatus} syncing={syncing} onUpdated={()=>{void loadFeeds();void refreshArticles();}}/>
         <div className="flex-1 overflow-hidden">
-          <ArticleList
+          {searchLoading ? <SearchLoading skeleton /> : <ArticleList
             articles={articles}
             relevanceOrder={searchInfo?.mode === "jev"}
             selectedId={selected?.id ?? null}
@@ -826,7 +839,7 @@ export default function FeedsPage() {
             onGroupingChange={changeGrouping}
             loadMoreError={loadMoreError}
             emptyMessage={searchLoading ? "検索中…" : searchError ? "検索結果を取得できませんでした" : searchInfo?.mode === "jev" ? "候補の中に、検索意図に十分合う記事が見つかりませんでした" : view === "later" ? "条件に合う保存記事がありません。一覧の「あとで読む」から追加できます。" : undefined}
-          />
+          />}
         </div>
       </section>
       {/* リサイズハンドル (desktop only) */}

@@ -30,8 +30,27 @@ it('OFF and explicit keyword fallback make no remote calls',async()=>{
 it('rejects Jev cursors after switching to keyword mode',async()=>{
  expect((await GET(new NextRequest('http://localhost/api/articles?search=test&cursor=jev:any:1'))).status).toBe(409);
 });
-it('reports missing expansion credentials safely without returning candidates',async()=>{
+it('searches an empty scope without Stage1 credentials or remote calls',async()=>{
  updateSettings({jevApiKey:'test-secret',jevSearchEnabled:true});
  const response=await GET(new NextRequest('http://localhost/api/articles?search=test'));
- expect(response.status).toBe(503);const body=await response.json();expect(body.error).toContain('Jev');expect(body.articles).toBeUndefined();expect(JSON.stringify(body)).not.toContain('test-secret');
+ expect(response.status).toBe(200);const body=await response.json();expect(body.articles).toEqual([]);expect(JSON.stringify(body)).not.toContain('test-secret');
+});
+it('rejects expired progress tokens without restarting a paid search',async()=>{
+ updateSettings({jevApiKey:'test-secret',jevSearchEnabled:true});
+ const response=await GET(new NextRequest('http://localhost/api/articles?search=test&searchJob=expired'));
+ expect(response.status).toBe(409);
+});
+it('returns resumable HTTP 202 progress and then completes without repeating title checks',async()=>{
+ updateSettings({jevApiKey:crypto.randomUUID(),jevSearchEnabled:true});
+ database.raw.exec("INSERT INTO feeds(id,title,url,created_at) VALUES('route','Route','https://example.com/route',1)");
+ database.raw.transaction(()=>{for(let i=0;i<1050;i++)database.raw.prepare('INSERT INTO articles(id,feed_id,title,url,dedup_hash,sort_key,created_at) VALUES(?,?,?,?,?,1,1)').run('r'+i,'route','天気'+i,'https://example.com/'+i,'r'+i);})();
+ let sent=0;
+ vi.stubGlobal('fetch',async(_url:string,init:RequestInit)=>{
+   const request=JSON.parse(String(init.body));sent+=request.state.articles.length;
+   return Response.json({answers:Object.fromEntries(Object.keys(request.questions).map(k=>[k,{type:'score',score:0}])),usage:{input_tokens:200,output_tokens:20}});
+ });
+ const first=await GET(new NextRequest('http://localhost/api/articles?search=面接&feedId=route'));
+ expect(first.status).toBe(202);const progress=await first.json();expect(progress.pending).toBe(true);
+ const done=await GET(new NextRequest('http://localhost/api/articles?search=面接&feedId=route&searchJob='+progress.search.jobId));
+ expect(done.status).toBe(200);expect((await done.json()).search.titleChecked).toBe(1050);expect(sent).toBe(1050);
 });
