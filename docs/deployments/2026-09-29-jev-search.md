@@ -24,9 +24,40 @@ The original checkout is untouched (260 file hashes checked against the start-of
 - Local browser at 127.0.0.1:3392: save/reload toggle and key, no key echo, missing-provider error, normal-search recovery, desktop and 390px layout.
 - Controlled browser API fixtures: relevance order preserved even when dates differ; expired next-page response → restart → successful next page, without stale error. These fixtures are not Jev accuracy evidence.
 
-## Pending real-service validation and production rollout
+## Production deployment (2026-09-29)
 
-No real TypeSafe key has been supplied or located in this task. No real Jev calls or relevance-quality/latency evaluation have been made; no production files or configuration have been changed.
-Use a real TypeSafe key in Settings and the existing configured Stage1 provider to evaluate queries such as 面接について against representative articles, including relevant paraphrases and unrelated recruitment news. Adjust the threshold only using observed results. The default threshold is an initial rubric choice, not a measured accuracy guarantee.
+Merged into `main` and pushed to origin. Application revision: `5c5b950d66d290c2e976221f90332caf34e6946d`.
+Image: `yomu:jev-5c5b950-verified`, `sha256:2dcea1c00f6bac707aff50dd4e64d43d3208c94ecee6bf98b71ebcb95aa6055b`.
+Public service: https://yomu-rss.my-house.tokyo.
 
-Before rollout, preserve the production Compose overrides, especially the migration override under `/opt/yomu-backups/20260911-ui/startup-applied-migrations.yml` and `docker-compose.browser.yml`; do not run the generic deploy script blindly. Preserve DB and credentials. Keep the toggle OFF until actual validation is complete. No worktree or baseline deletion is appropriate while rollout remains pending.
+Production-only DNS configuration was preserved and committed. All four Compose files were retained, including `/opt/yomu-backups/20260911-ui/startup-applied-migrations.yml`. Web/worker environment-value hashes, mount paths and DNS were unchanged. Browser and Cloudflare containers were not recreated. No migrations or production credentials were changed. 58,214 articles and 21 feeds remained present after deployment.
+
+Validation: full 311-test suite on the merged application revision; isolated production-image HTTP smoke covering health, setup/login, authenticated settings save/read, Jev toggle and redacted key, keyword fallback, missing-provider failure and unauthorized 401. Final public health/login returned 200; unauthenticated settings/search returned 401. Web healthy and worker running on the new image.
+
+### Deployment incidents and recovery
+
+DB backup and validation created high disk wait on the HDD-backed VM; the existing Web health timed out. The build was cancelled, backup validation moved off-host, and the old Web container restarted, restoring HTTP 200. No infrastructure settings were changed.
+
+To avoid another server-side compile, locally verified Next standalone/static and worker artifacts were layered onto the prior production runtime with unchanged dependencies. An initial packaging attempt dereferenced `.next/node_modules` symlinks, causing an instrumentation `Cannot find module bindings` error and HTTP 500. It was rolled back to the preserved old image. Packaging was corrected to preserve symlinks and the corrected image passed full HTTP smoke in an isolated network-disabled container before redeployment. Final production health was rechecked successfully. Reuse rule: preserve standalone dependency symlinks and verify HTTP startup, not just a top-level native-module import, before switching traffic.
+
+### Backups
+
+- Server: `/opt/yomu-backups/20260929-jev-search/` holds source/config archive (including original `.env`, access restricted), DB snapshot, runtime fingerprints, deployment logs and artifact bundles.
+- Rollback image retained: `yomu:before-jev-20260929`.
+- Local DB copy: `/home/shuta/Workspace/backups/yomu-20260929-jev/database-before.db`, directory 0700, file 0600.
+- Snapshot: 2,561,425,408 bytes, 58,214 articles, 21 feeds, SQLite `quick_check = ok` (verified on the PC to avoid HDD load).
+- DB SHA-256: `254c87f9db2186e6d32328070ac81b0a4285251ecb466499601f8eba50004f25`.
+- Original local working state retained in baseline `a10d630` and stash `5b90aae4176c911cc6971aa74137010f6ab51a87`.
+
+### Still pending
+
+The production Jev key is unconfigured and the toggle remains OFF. No real Jev calls or real-article relevance/latency evaluation have been made. Register a TypeSafe key in Settings → AI → Jev検索, then validate queries such as 面接について against relevant paraphrases and unrelated recruitment news before relying on the initial score threshold.
+
+### Cleanup candidates (not authorized/deleted)
+
+- `/home/shuta/Workspace/worktrees/yomu-jev-search` and local `feat/jev-search`: application changes merged into main. Approximately 1.2 GB of dependencies/builds and synthetic QA data; stopping its local server removes only the preview at 127.0.0.1:3392. No related local Docker bind mounts were found.
+- Server container `yomu-jev-verify`: isolated synthetic smoke-test data, no network or production mounts. May stop/remove the container after approval; do not remove its anonymous volume without explicitly including that scope.
+- Failed candidate image tag `yomu:jev-5c5b950`: not used by the final production containers. Do not remove `yomu:latest`, `yomu:jev-5c5b950-verified`, or the rollback image.
+- `/home/shuta/Workspace/backups/yomu-20260929-jev/uncompressed-transfer.partial`: interrupted duplicate transfer, superseded by the verified complete DB copy. Retain the complete backup and production backup directory.
+
+Recheck current modifications, ignored files, branch use, process/container mounts and backups immediately before any approved deletion.
