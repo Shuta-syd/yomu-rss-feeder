@@ -6,6 +6,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ArticleFontSizeControl } from "@/components/layout/ArticleFontSizeControl";
 import { MemosIntegrationPanel } from "@/components/layout/MemosIntegrationPanel";
 import { BrowserIntegrationPanel } from "@/components/layout/BrowserIntegrationPanel";
+import { JevSearchPanel } from "@/components/layout/JevSearchPanel";
 import { AIUsagePanel } from "@/components/layout/AIUsagePanel";
 import { FeedIcon } from "@/components/feeds/FeedIcon";
 
@@ -442,6 +443,7 @@ export default function SettingsPage() {
       {/* AIタブ */}
       {activeTab === "ai" && (
         <section className="space-y-4">
+          <JevSearchPanel />
           <AIUsagePanel models={[settings.geminiModelStage1,settings.geminiModelStage2]} />
           <div className={cardCls} style={cardStyle}>
             <h2 className={sectionTitleCls}>AIサービスの接続</h2>

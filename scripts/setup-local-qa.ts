@@ -71,6 +71,8 @@ try {
         WHERE key IN (
           'session_hash',
           'session_expires_at',
+          'jev_api_key',
+          'jev_search_enabled',
           'gemini_api_key',
           'openai_api_key',
           'anthropic_api_key'

@@ -12,6 +12,9 @@ export interface ArticleListParams {
   isStarred?: boolean;
   isReadLater?: boolean;
   search?: string;
+  /** Internal candidate retrieval; never accepted directly from HTTP. */
+  searchTerms?: string[];
+  rankedIds?: string[];
   cursor?: string;
   limit?: number;
 }
@@ -82,6 +85,8 @@ export function listArticles(params: ArticleListParams): ArticleListResult {
   const limit = Math.min(params.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
   const where: string[] = [];
   const values: unknown[] = [];
+  let orderSql = "a.sort_key DESC, a.id DESC";
+  const orderValues: unknown[] = [];
 
   if (params.feedId) {
     where.push("a.feed_id = ?");
@@ -114,6 +119,25 @@ export function listArticles(params: ArticleListParams): ArticleListResult {
     values.push(`"${term}"`);
   }
 
+  if (params.searchTerms) {
+    const terms = [...new Set(params.searchTerms.map(t => t.trim()).filter(Boolean))].slice(0, 9);
+    if (!terms.length) where.push("0");
+    else {
+      // instr treats %, _, quotes and SQL/FTS operators literally, including CJK substrings.
+      const fields = ["a.title", "a.ai_title_ja", "a.ai_summary_short", "a.ai_tags", "a.content_plain"];
+      where.push("(" + terms.flatMap(() => fields.map(f => `instr(lower(COALESCE(${f}, '')), lower(?)) > 0`)).join(" OR ") + ")");
+      for (const term of terms) values.push(...fields.map(() => term));
+      orderSql = "(" + terms.flatMap(() => fields.map((f,i) => `(CASE WHEN instr(lower(COALESCE(${f}, '')), lower(?)) > 0 THEN ${i < 2 ? 4 : i === 4 ? 1 : 2} ELSE 0 END)`)).join(" + ") + ") DESC, " + orderSql;
+      for (const term of terms) orderValues.push(...fields.map(() => term));
+    }
+  }
+  if (params.rankedIds) {
+    where.push("a.id IN (SELECT value FROM json_each(?))");
+    values.push(JSON.stringify(params.rankedIds));
+    orderSql = "(SELECT key FROM json_each(?) WHERE value = a.id), a.id";
+    orderValues.length = 0;
+    orderValues.push(JSON.stringify(params.rankedIds));
+  }
   const cursor = parseCursor(params.cursor);
   if (cursor) {
     where.push("(a.sort_key < ? OR (a.sort_key = ? AND a.id < ?))");
@@ -124,9 +148,9 @@ export function listArticles(params: ArticleListParams): ArticleListResult {
 
   const rows = rawDb
     .prepare(
-      `SELECT a.*, f.title AS feed_title FROM articles a LEFT JOIN feeds f ON f.id = a.feed_id ${whereSql} ORDER BY a.sort_key DESC, a.id DESC LIMIT ?`,
+      `SELECT a.*, f.title AS feed_title FROM articles a LEFT JOIN feeds f ON f.id = a.feed_id ${whereSql} ORDER BY ${orderSql} LIMIT ?`,
     )
-    .all(...values, limit + 1) as Record<string, unknown>[];
+    .all(...values, ...orderValues, limit + 1) as Record<string, unknown>[];
 
   const hasMore = rows.length > limit;
   const pageRows = hasMore ? rows.slice(0, limit) : rows;

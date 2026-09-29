@@ -7,6 +7,7 @@ type Rates = Record<string,{input:number;output:number}>;
 export type Budget = {dailyYen:number;monthlyYen:number;yenPerUsd:number;rates?:Rates};
 // Text-only standard rates; review against https://ai.google.dev/gemini-api/docs/pricing
 const DEFAULT_RATES:Rates={
+ 'jev-1.13.0':{input:.042,output:0}, // https://docs.typesafe.ai/models (2026-09-29)
  'gemini-3.1-flash-lite':{input:.25,output:1.5},
  'gemini-3.5-flash-lite':{input:.3,output:2.5},
  'gemini-3-flash-preview':{input:.5,output:3},

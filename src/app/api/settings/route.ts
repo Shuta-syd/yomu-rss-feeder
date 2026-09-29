@@ -14,6 +14,8 @@ export async function GET() {
 }
 
 const bodySchema = z.object({
+  jevApiKey: z.string().trim().max(512).nullable().optional(),
+  jevSearchEnabled: z.boolean().optional(),
   geminiApiKey: z.string().nullable().optional(),
   openaiApiKey: z.string().nullable().optional(),
   anthropicApiKey: z.string().nullable().optional(),

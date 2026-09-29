@@ -6,11 +6,12 @@ import { OpenAIProvider } from "./openai";
 import { AnthropicProvider } from "./anthropic";
 
 export interface ChatParams {
+  signal?: AbortSignal;
   systemPrompt: string;
   userPrompt: string;
   temperature?: number;
   maxOutputTokens?: number;
-  purpose?: "summary_classification" | "classification" | "detail";
+  purpose?: "summary_classification" | "classification" | "detail" | "search_expansion" | "search_relevance";
   onUsage?: (usage: Usage) => void;
 }
 

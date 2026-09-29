@@ -21,7 +21,7 @@ export class AnthropicProvider implements LLMProvider {
         messages: [{ role: "user", content: params.userPrompt }],
         temperature: params.temperature ?? 0.3,
         max_tokens: params.maxOutputTokens ?? 1024,
-      });
+      }, { signal: params.signal });
 
       if (res.stop_reason === "end_turn" || res.stop_reason === "max_tokens") {
         // normal
@@ -55,7 +55,7 @@ export class AnthropicProvider implements LLMProvider {
         messages: [{ role: "user", content: params.userPrompt }],
         temperature: params.temperature ?? 0.3,
         max_tokens: params.maxOutputTokens ?? 4096,
-      });
+      }, { signal: params.signal });
 
       let inputTokens=0;
       for await (const event of stream) {

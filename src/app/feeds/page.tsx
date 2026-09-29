@@ -55,6 +55,13 @@ export default function FeedsPage() {
   const [syncError,setSyncError]=useState<string|null>(null);
   const [classifications, setClassifications] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [keywordOverride, setKeywordOverride] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [jevEnabled, setJevEnabled] = useState(false);
+  const [searchInfo, setSearchInfo] = useState<{mode: string; candidateCount: number; candidateTotal: number} | null>(null);
+  useEffect(() => { setSearchDraft(search); }, [search]);
   const [listWidth, setListWidth] = useState<number | null>(null);
   const [aiStatus, setAiStatus] = useState<AIUpdateStatus | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -258,10 +265,13 @@ export default function FeedsPage() {
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    setSearchLoading(true);setSearchError(null);setSearchInfo(null);setLoadMoreError(null);
+    setArticles([]);setNextCursor(null);
     const params = buildArticlesParams({
       feedId: selectedFeedId,
       category: selectedCategory,
       search,
+      searchMode: keywordOverride ? "keyword" : undefined,
       classifications,
       view,
       readFilter,
@@ -275,12 +285,16 @@ export default function FeedsPage() {
       }
       const data = await res.json();
       if (ctrl.signal.aborted) return;
+      if (!res.ok) { setSearchError(data.error ?? "記事を取得できませんでした。"); return; }
       setArticles(data.articles);
       setNextCursor(data.nextCursor ?? null);
+      setSearchInfo(data.search ?? null);
     } catch (e) {
-      if ((e as Error).name !== "AbortError") throw e;
+      if (!ctrl.signal.aborted && (e as Error).name !== "AbortError") setSearchError("通信できませんでした。再試行してください。");
+    } finally {
+      if (!ctrl.signal.aborted) setSearchLoading(false);
     }
-  }, [selectedFeedId, selectedCategory, search, classifications, view, readFilter, router]);
+  }, [selectedFeedId, selectedCategory, search, keywordOverride, classifications, view, readFilter, router]);
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMoreRef.current) return;
@@ -293,6 +307,7 @@ export default function FeedsPage() {
       feedId: selectedFeedId,
       category: selectedCategory,
       search,
+      searchMode: keywordOverride ? "keyword" : undefined,
       classifications,
       view,
       readFilter,
@@ -311,7 +326,8 @@ export default function FeedsPage() {
         setArticles((prev) => appendArticles(prev, data.articles));
         setNextCursor(data.nextCursor ?? null);
       } else {
-        setLoadMoreError("続きを取得できませんでした。再試行してください。");
+        const data = await res.json().catch(() => ({}));
+        setLoadMoreError(data.error ?? "続きを取得できませんでした。再試行してください。");
       }
     } catch (e) {
       if (!ctrl.signal.aborted && (e as Error).name !== "AbortError") setLoadMoreError("通信できませんでした。接続を確認して再試行してください。");
@@ -319,7 +335,7 @@ export default function FeedsPage() {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [nextCursor, selectedFeedId, selectedCategory, search, classifications, view, readFilter, router]);
+  }, [nextCursor, selectedFeedId, selectedCategory, search, keywordOverride, classifications, view, readFilter, router]);
 
   // バックグラウンド更新: リストを丸ごと差し替えず ID マージで更新する。
   // 行コンポーネントの再マウント (サムネイル再読み込み)・ページネーション破壊・
@@ -328,6 +344,7 @@ export default function FeedsPage() {
     feedId: selectedFeedId,
     category: selectedCategory,
     search,
+    searchMode: keywordOverride ? "keyword" : undefined,
     classifications,
     view,
     readFilter,
@@ -345,7 +362,7 @@ export default function FeedsPage() {
   }, [articles]);
 
   const refreshArticles = useCallback(async () => {
-    if (refreshingRef.current) return;
+    if (search.trim() || refreshingRef.current) return;
     refreshingRef.current = true;
     try {
       const params = buildArticlesParams({
@@ -391,6 +408,7 @@ export default function FeedsPage() {
         return r.ok ? r.json() : null;
       })
       .then((d) => {
+        if (d) setJevEnabled(d.jevSearchEnabled === true);
         if (d && typeof d.autoMarkAsRead === "boolean") {
           setAutoMarkAsRead(d.autoMarkAsRead);
         }
@@ -413,7 +431,8 @@ export default function FeedsPage() {
 
   useEffect(() => {
     if (!restored) return;
-    loadInitial();
+    void loadInitial();
+    return () => abortRef.current?.abort();
   }, [loadInitial, restored, readLaterListVersion]);
 
   // マウント時に一度だけ URL を読み、閲覧状態を復元する。
@@ -733,17 +752,23 @@ export default function FeedsPage() {
               <ReaderIcon name="menu"/>
             </button>
           )}
-          <div className="reader-search-field">
+          <form className="reader-search-field" onSubmit={e => {
+            e.preventDefault();
+            if (searchDraft.trim() === search.trim()) void loadInitial();
+            else { setSearch(searchDraft.trim()); setSelected(null); }
+          }}>
           <ReaderIcon name="search"/>
           <input
             type="search"
-            placeholder="記事を検索"
+            placeholder={jevEnabled && !keywordOverride ? "例：面接について" : "記事を検索"}
             aria-label="記事を検索"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchDraft}
+            maxLength={300}
+            onChange={(e) => { setSearchDraft(e.target.value); if (!e.target.value) { setSearch(""); setKeywordOverride(false); } }}
             className="reader-search-input"
           />
-          </div>
+          <button type="submit" className="reader-icon-button" aria-label="検索を実行" title="検索を実行"><ReaderIcon name="search"/></button>
+          </form>
           </div>
           <div className="reader-toolbar-actions">
             <ReadFilterToggle value={readFilter} onChange={setReadFilter} />
@@ -766,6 +791,14 @@ export default function FeedsPage() {
             </a>
           </div>
         </div>
+        {(searchLoading || searchError || search.trim()) && <div className="border-b px-4 py-2 text-sm" style={{borderColor:"var(--card-border)"}}>
+          {searchLoading ? <p role="status">{search.trim() && jevEnabled && !keywordOverride ? "関連する記事を探しています…" : "読み込み中…"}</p> : null}
+          {searchError ? <p role="alert">{searchError}</p> : null}
+          {!searchLoading && searchInfo?.mode === "jev" && <p role="status">Jev検索 · 関連度順 · 候補{searchInfo.candidateCount}件を判定{searchInfo.candidateTotal > searchInfo.candidateCount ? `（候補全${searchInfo.candidateTotal}件のうち上位を検索）` : ""}</p>}
+          {search.trim() && jevEnabled && !keywordOverride && <button type="button" className="underline py-2" onClick={()=>setKeywordOverride(true)}>この検索を通常検索に切り替える</button>}
+          {search.trim() && jevEnabled && keywordOverride && <button type="button" className="underline py-2" onClick={()=>setKeywordOverride(false)}>Jev検索に戻す</button>}
+          {(searchError || loadMoreError) && <button type="button" className="underline py-2 ml-3" onClick={()=>void loadInitial()}>最初から再検索</button>}
+        </div>}
         {view === "later" && <div className="flex items-center gap-2 border-b px-4 py-3 text-sm" style={{borderColor:"var(--card-border)",color:"var(--accent)"}}><ReaderIcon name="bookmark"/><h2 className="font-semibold">あとで読む</h2><span className="ml-auto text-xs">{readLaterCount}件保存</span></div>}
         <ClassificationFilters
           conditions={{feedId:selectedFeedId,category:selectedCategory,view,readFilter,search,classifications}}
@@ -779,6 +812,7 @@ export default function FeedsPage() {
         <div className="flex-1 overflow-hidden">
           <ArticleList
             articles={articles}
+            relevanceOrder={searchInfo?.mode === "jev"}
             selectedId={selected?.id ?? null}
             onSelect={handleSelect}
             onChange={handleArticleChange}
@@ -791,7 +825,7 @@ export default function FeedsPage() {
             grouping={grouping}
             onGroupingChange={changeGrouping}
             loadMoreError={loadMoreError}
-            emptyMessage={view === "later" ? "条件に合う保存記事がありません。一覧の「あとで読む」から追加できます。" : undefined}
+            emptyMessage={searchLoading ? "検索中…" : searchError ? "検索結果を取得できませんでした" : searchInfo?.mode === "jev" ? "候補の中に、検索意図に十分合う記事が見つかりませんでした" : view === "later" ? "条件に合う保存記事がありません。一覧の「あとで読む」から追加できます。" : undefined}
           />
         </div>
       </section>

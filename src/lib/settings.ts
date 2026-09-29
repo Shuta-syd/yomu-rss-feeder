@@ -6,6 +6,8 @@ import { encrypt, decrypt } from "./crypto";
 export type ProviderType = "gemini" | "openai" | "anthropic";
 
 export interface Settings {
+  hasJevApiKey: boolean;
+  jevSearchEnabled: boolean;
   hasGeminiApiKey: boolean;
   hasOpenaiApiKey: boolean;
   hasAnthropicApiKey: boolean;
@@ -111,6 +113,8 @@ function del(key: string): void {
 export function getSettings(): Settings {
   const theme = (get("theme") as Settings["theme"]) ?? DEFAULTS.theme;
   return {
+    hasJevApiKey: get("jev_api_key") !== undefined,
+    jevSearchEnabled: get("jev_search_enabled") === "true",
     hasGeminiApiKey: get("gemini_api_key") !== undefined,
     hasOpenaiApiKey: get("openai_api_key") !== undefined,
     hasAnthropicApiKey: get("anthropic_api_key") !== undefined,
@@ -124,6 +128,8 @@ export function getSettings(): Settings {
 }
 
 export interface SettingsUpdate {
+  jevApiKey?: string | null;
+  jevSearchEnabled?: boolean;
   geminiApiKey?: string | null;
   openaiApiKey?: string | null;
   anthropicApiKey?: string | null;
@@ -146,6 +152,8 @@ function updateApiKey(dbKey: string, value: string | null | undefined): void {
 
 export function updateSettings(input: SettingsUpdate): Settings {
   const current = getSettings();
+  const nextKey = input.jevApiKey === undefined ? current.hasJevApiKey : Boolean(input.jevApiKey?.trim());
+  if (input.jevSearchEnabled === true && !nextKey) throw new InvalidSettingsError("JevのAPIキーを登録してください。");
   const stage1 = resolveStageModel(
     current.stage1Provider,
     current.geminiModelStage1,
@@ -159,6 +167,9 @@ export function updateSettings(input: SettingsUpdate): Settings {
     input.geminiModelStage2,
   );
 
+  updateApiKey("jev_api_key", input.jevApiKey?.trim() ?? input.jevApiKey);
+  if (!nextKey) set("jev_search_enabled", "false");
+  else if (input.jevSearchEnabled !== undefined) set("jev_search_enabled", String(input.jevSearchEnabled));
   updateApiKey("gemini_api_key", input.geminiApiKey);
   updateApiKey("openai_api_key", input.openaiApiKey);
   updateApiKey("anthropic_api_key", input.anthropicApiKey);

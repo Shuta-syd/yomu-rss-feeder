@@ -29,6 +29,7 @@ const Thumbnail = memo(function Thumbnail({ src }: { src: string }) {
 
 interface Props {
   articles: ArticleDTO[];
+  relevanceOrder?: boolean;
   groups: ArticleGroup<ArticleDTO>[];
   grouping: boolean;
   onGroupingChange: (value: boolean) => void;
@@ -71,7 +72,7 @@ function RelatedArticles({ articles, selectedId, onSelect }: { articles: Article
   </details>;
 }
 
-export const ArticleList = memo(function ArticleList({ articles, groups, grouping, onGroupingChange, loadMoreError, selectedId, onChange, onSelect, onLoadMore, hasMore, loadingMore, resetKey, allowGrouping = false, emptyMessage = "記事がありません" }: Props) {
+export const ArticleList = memo(function ArticleList({ articles, relevanceOrder = false, groups, grouping, onGroupingChange, loadMoreError, selectedId, onChange, onSelect, onLoadMore, hasMore, loadingMore, resetKey, allowGrouping = false, emptyMessage = "記事がありません" }: Props) {
   const groupedCount = articles.length - groups.length;
   const sentinelRef = useRef<HTMLLIElement>(null);
   const scrollRef = useRef<HTMLUListElement>(null);
@@ -140,7 +141,7 @@ export const ArticleList = memo(function ArticleList({ articles, groups, groupin
     <ul ref={scrollRef} className="article-list-container min-h-0 flex-1 overflow-y-auto">
       {groups.flatMap(({representative: a, related}) => {
         const curKey = dateKey(a.sortKey);
-        const showHeader = curKey !== prevKey;
+        const showHeader = !relevanceOrder && curKey !== prevKey;
         prevKey = curKey;
         const tags = previewTags(a.aiTags);
         const title = previewText(a.aiTitleJa) || a.title;

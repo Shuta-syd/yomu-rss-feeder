@@ -6,6 +6,7 @@ export interface BuildArticlesParamsInput {
   classification?: string;
   classifications?: string[];
   search?: string;
+  searchMode?: "keyword";
   readFilter?: ReadFilter;
   view?: "feeds" | "starred" | "later";
   cursor?: string | null;
@@ -36,6 +37,8 @@ export function buildArticlesParams(input: BuildArticlesParamsInput): URLSearchP
     const trimmed = input.search.trim();
     if (trimmed) params.set("search", trimmed);
   }
+
+  if (input.searchMode === "keyword") params.set("searchMode", "keyword");
 
   for (const value of new Set([...(input.classifications ?? []), ...(input.classification ? [input.classification] : [])])) params.append("classification", value);
 

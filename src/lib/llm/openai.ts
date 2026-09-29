@@ -24,7 +24,7 @@ export class OpenAIProvider implements LLMProvider {
         temperature: params.temperature ?? 0.3,
         max_tokens: params.maxOutputTokens ?? 1024,
         response_format: { type: "json_object" },
-      });
+      }, { signal: params.signal });
 
       if(res.usage) params.onUsage?.({inputTokens:res.usage.prompt_tokens,outputTokens:res.usage.completion_tokens,known:true});
       const content = res.choices[0]?.message?.content;
@@ -60,7 +60,7 @@ export class OpenAIProvider implements LLMProvider {
         response_format: { type: "json_object" },
         stream: true,
         stream_options: { include_usage: true },
-      });
+      }, { signal: params.signal });
 
       for await (const chunk of stream) {
         if(chunk.usage) params.onUsage?.({inputTokens:chunk.usage.prompt_tokens,outputTokens:chunk.usage.completion_tokens,known:true});

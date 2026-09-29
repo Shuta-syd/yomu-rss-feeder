@@ -34,7 +34,7 @@ export class GeminiProvider implements LLMProvider {
           responseMimeType: "application/json",
         },
       }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.any([AbortSignal.timeout(30_000), ...(params.signal ? [params.signal] : [])]),
     });
 
     if (!res.ok) {
@@ -79,7 +79,7 @@ export class GeminiProvider implements LLMProvider {
           responseMimeType: "application/json",
         },
       }),
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.any([AbortSignal.timeout(120_000), ...(params.signal ? [params.signal] : [])]),
     });
 
     if (!res.ok) {
