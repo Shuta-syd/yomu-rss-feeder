@@ -58,12 +58,16 @@ APIキー (Gemini / OpenAI / Anthropic) は初回セットアップ後、設定�
 
 ### RSS同期の運用設定
 
+本番で使用している外向きDNS設定を維持するため、app/workerは既定で `1.1.1.1` と `8.8.8.8` を使用します。必要に応じて `YOMU_DNS_PRIMARY` / `YOMU_DNS_SECONDARY` で変更してください。
+
 本番Docker Composeでは、Web応答を担当する `app` とRSS同期/AI処理を担当する `worker` を分けて起動する。`app` 側では自動同期を起動せず、重いJSDOM解析やLLM処理でWeb応答が詰まるのを避ける。
 
 障害時に自動同期を止める場合は `YOMU_AUTO_SYNC_ENABLED=false` を設定して再起動する。この設定は `worker` にだけ適用され、Web UI/APIはそのまま起動する。
 
 ```bash
 YOMU_AUTO_SYNC_ENABLED=true
+YOMU_DNS_PRIMARY=1.1.1.1
+YOMU_DNS_SECONDARY=8.8.8.8
 YOMU_SYNC_MAX_DURATION_MS=480000
 YOMU_SYNC_LOCK_TIMEOUT_MS=600000
 YOMU_MAX_FEED_ITEMS=200

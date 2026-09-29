@@ -15,6 +15,10 @@ x-yomu-env: &yomu-env
   YOMU_MAX_ITEM_HTML_CHARS: ${YOMU_MAX_ITEM_HTML_CHARS:-200000}
   YOMU_STAGE1_PENDING_LIMIT: ${YOMU_STAGE1_PENDING_LIMIT:-50}
 
+x-yomu-dns: &yomu-dns
+  - "${YOMU_DNS_PRIMARY:-1.1.1.1}"
+  - "${YOMU_DNS_SECONDARY:-8.8.8.8}"
+
 services:
   app:
     build:
@@ -27,6 +31,7 @@ services:
       - "3300:3000"
     volumes:
       - yomu-data:/data
+    dns: *yomu-dns
     environment:
       <<: *yomu-env
       YOMU_AUTO_SYNC_ENABLED: "false"
@@ -46,6 +51,7 @@ services:
         condition: service_healthy
     volumes:
       - yomu-data:/data
+    dns: *yomu-dns
     environment:
       <<: *yomu-env
       YOMU_AUTO_SYNC_ENABLED: ${YOMU_AUTO_SYNC_ENABLED:-true}
