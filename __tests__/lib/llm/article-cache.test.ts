@@ -42,3 +42,11 @@ it('does not reuse for unidentifiable URLs',async()=>{
  expect((await reuseArticleResult(invalid,async()=>'"second"',validate)).content).toBe('"second"');
  expect(testDb.raw.prepare('SELECT count(*) n FROM ai_result_cache').get()).toEqual({n:0});
 });
+it('reuses a schema-less cache entry from before structured-output support',async()=>{
+ const {createHash}=await import('node:crypto');
+ // Legacy persisted key shape, intentionally independent of the new cache-key implementation.
+ const oldKey=createHash('sha256').update(JSON.stringify(['article-result-v1','https://example.com/story','gemini','lite','Return JSON','An article',null,0.3,200])).digest('hex');
+ testDb.raw.prepare('INSERT INTO ai_result_cache(cache_key,content,owner,expires_at) VALUES(?,?,NULL,?)').run(oldKey,'"previously paid"',Date.now()+60_000);
+ const result=await reuseArticleResult(request,async()=>{throw new Error('must not charge again');},validate);
+ expect(result).toEqual({content:'"previously paid"',reused:true});
+});

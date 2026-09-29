@@ -1,9 +1,17 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {AI_PAUSE_LABELS,type AIUpdateStatus,type FeedUpdateStatus} from '@/lib/update-status';
+import {AI_PAUSE_LABELS,AI_FAILURE_LABELS,type AIFailureReason,type AIUpdateStatus,type FeedUpdateStatus} from '@/lib/update-status';
 export function UpdateStatusPanel({ai,onUpdated,syncing=false,syncError}:{ai:AIUpdateStatus|null;onUpdated:()=>void;syncing?:boolean;syncError?:string|null}) {
  const [feeds,setFeeds]=useState<FeedUpdateStatus[]>([]);
  const [loaded,setLoaded]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [aiRetrying,setAiRetrying]=useState(false),[aiNotice,setAiNotice]=useState('');
+ const aiInFlight=useRef(false);
+ const retryAi=async()=>{
+  if(aiInFlight.current)return;aiInFlight.current=true;setAiRetrying(true);setAiNotice('');
+  try{const r=await fetch('/api/ai/retry',{method:'POST'});const data=await r.json();if(!r.ok)throw new Error(data.error??'再試行を開始できませんでした。');setAiNotice(data.queued?`${data.queued}件を再試行待ちにしました。通常は5分以内に順次処理します。`:'再試行が必要な記事はありません。');onUpdated();}
+  catch(e){setAiNotice(e instanceof Error?e.message:'再試行を開始できませんでした。');}
+  finally{aiInFlight.current=false;setAiRetrying(false);}
+ };
  const [retrying,setRetrying]=useState<string|null>(null);
  const inFlight=useRef(false),generation=useRef(0);
  const load=useCallback(async()=>{
@@ -36,7 +44,7 @@ export function UpdateStatusPanel({ai,onUpdated,syncing=false,syncError}:{ai:AIU
    {pause&&<span className="ml-2" style={{color:'var(--accent)'}}>{AI_PAUSE_LABELS[pause]}</span>}
    {!pause&&(ai?.processing??0)>0&&<span className="ml-2" style={{color:'var(--muted)'}}>AI処理中 {ai?.processing}件</span>}
    {!pause&&ai?.processing===0&&ai.pending>0&&<span className="ml-2" style={{color:'var(--muted)'}}>AI待機 {ai.pending}件</span>}
-   {(ai?.failed??0)>0&&<span className="ml-2">AI失敗 {ai?.failed}件</span>}
+   {(ai?.failed??0)>0&&<span className="ml-2">AI要再試行 {ai?.failed}件</span>}
   </summary>
   <div className="max-h-[55vh] space-y-3 overflow-y-auto border-t p-3" style={{borderColor:'var(--card-border)'}}>
    <section className="space-y-2 rounded-lg p-3" style={{background:'var(--card)'}}>
@@ -48,7 +56,13 @@ export function UpdateStatusPanel({ai,onUpdated,syncing=false,syncError}:{ai:AIU
      {pause==='api_key'&&<p>使用するAIのAPIキーが未登録です。</p>}
      {!pause&&ai.processing===0&&ai.pending>0&&<p>次の自動処理を待っています。</p>}
      {ai.processing>0&&ai.currentFeedTitle&&<p className="break-words">{ai.currentFeedTitle}{ai.currentTitle?`：${ai.currentTitle}`:''}</p>}
-     {ai.failed>0&&<p>処理に失敗した記事があります。各記事のAI処理から再試行できます。</p>}
+     {ai.failed>0&&<>
+      <p className="leading-relaxed">過去の分類・要約が未完了の記事です。記事の取得やJev検索の失敗件数ではありません。</p>
+      {ai.failureCounts&&<ul className="space-y-1">{(Object.keys(AI_FAILURE_LABELS) as AIFailureReason[]).filter(reason=>(ai.failureCounts?.[reason]??0)>0).map(reason=><li key={reason} className="flex justify-between gap-3"><span>{AI_FAILURE_LABELS[reason]}</span><span>{ai.failureCounts![reason].toLocaleString()}件</span></li>)}</ul>}
+      <p className="leading-relaxed" style={{color:'var(--muted)'}}>再試行はAI利用料がかかります。設定済みの予算内で10件ずつ処理し、残高・利用上限の問題は提供元の設定も確認してください。</p>
+      <button type="button" disabled={aiRetrying||ai.pending>0} onClick={()=>void retryAi()} className="min-h-11 rounded-lg px-3 py-2 disabled:opacity-50" style={{background:'var(--accent-subtle)',color:'var(--accent)'}}>{aiRetrying?'準備中…':'失敗分を10件再試行'}</button>
+     </>}
+     {aiNotice&&<p role="status" className="leading-relaxed">{aiNotice}</p>}
      {(pause||ai.failed>0)&&<a className="inline-flex min-h-11 items-center underline" href="/settings?tab=ai">AIの設定・予算を確認 →</a>}
     </>}
    </section>

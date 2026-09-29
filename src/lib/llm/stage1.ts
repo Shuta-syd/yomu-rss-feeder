@@ -5,7 +5,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db, rawDb } from "../db";
 import { articles, feeds } from "../db/schema";
 import { getSettings } from "../settings";
-import { createProvider, LLMBlockedError, LLMNoApiKeyError } from "./provider";
+import { createProvider, LLMApiError, LLMBlockedError, LLMNoApiKeyError } from "./provider";
 import {
   STAGE1_SYSTEM,
   STAGE1_SYSTEM_JP,
@@ -15,7 +15,7 @@ import {
 } from "./prompts";
 import { parseAndValidate, stage1Schema } from "./parse-response";
 
-import { classificationSchema, classificationOnlySchema, readManualClassification, replaceClassificationTags, CLASSIFICATION_INSTRUCTIONS } from "./classification";
+import { classificationSchema, classificationOnlySchema, stage1ResponseSchema, readManualClassification, replaceClassificationTags, CLASSIFICATION_INSTRUCTIONS } from "./classification";
 const classifiedStage1Schema = stage1Schema.extend({ classification: classificationSchema });
 
 const BATCH_TIMEOUT_MS = 5 * 60 * 1000;
@@ -67,12 +67,21 @@ export async function processStage1ForArticles(articleIds: string[], options: { 
           : "記事を分類してください。要約・翻訳は生成せずclassificationだけをJSONで返してください。") + CLASSIFICATION_INSTRUCTIONS,
         userPrompt: stage1UserPrompt(article.title, summarize ? (article.contentPlain ?? "") : (article.contentPlain ?? "").slice(0, 6000)),
         maxOutputTokens: 2048,
+        responseSchema: stage1ResponseSchema(summarize),
         purpose: summarize ? "summary_classification" : "classification",
       };
       const result = await reuseArticleResult({
         url: article.url, provider: settings.stage1Provider, model: settings.geminiModelStage1,
         params, fresh: options.forceSummary === true,
-      }, async () => (await provider.chat(params)).content, content => {
+      }, async () => {
+        try { return (await provider.chat(params)).content; }
+        catch (error) {
+          // Retry brief provider outages once. Billing/auth failures need intervention.
+          if (!(error instanceof LLMApiError) || ![500,502,503,504].includes(error.status)) throw error;
+          await new Promise(resolve=>setTimeout(resolve,1000));
+          return (await provider.chat(params)).content;
+        }
+      }, content => {
         parseAndValidate(content, summarize ? classifiedStage1Schema : classificationOnlySchema);
       });
       const parsed = summarize ? parseAndValidate(result.content, classifiedStage1Schema) : null;
@@ -118,6 +127,8 @@ export async function processStage1ForArticles(articleIds: string[], options: { 
         })
         .where(eq(articles.id, article.id))
         .run();
+      // Leave the rest pending instead of turning an outage into thousands of failures.
+      if(e instanceof LLMApiError && (e.status===401||e.status===403||e.status===429||e.status>=500))break;
     }
 
     await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));

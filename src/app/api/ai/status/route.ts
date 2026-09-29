@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
-import { db } from "@/lib/db";
+import { db, rawDb } from "@/lib/db";
 import { articles, feeds } from "@/lib/db/schema";
 import {getSettings} from "@/lib/settings";
-import {aiPauseReason} from "@/lib/update-status";
+import {aiPauseReason,aiFailureReason,type AIFailureCounts} from "@/lib/update-status";
 import { withAuth } from "@/lib/api-helpers";
 
 export async function GET() {
@@ -32,11 +32,15 @@ export async function GET() {
       .limit(1)
       .get();
 
+    const failureCounts:AIFailureCounts={billing:0,format:0,temporary:0,other:0};
+    const failures=rawDb.prepare("SELECT ai_stage1_error error,count(*) n,max(ai_stage1_processed_at) last FROM articles WHERE ai_stage1_status='failed' GROUP BY ai_stage1_error").all() as {error:string|null;n:number;last:number|null}[];
+    let lastFailureAt:number|null=null;
+    for(const row of failures){failureCounts[aiFailureReason(row.error)]+=row.n;if(row.last!==null)lastFailureAt=Math.max(lastFailureAt??0,row.last);}
     const settings=getSettings();
     const hasKey={gemini:settings.hasGeminiApiKey,openai:settings.hasOpenaiApiKey,anthropic:settings.hasAnthropicApiKey}[settings.stage1Provider];
     const pauseReason=aiPauseReason({pending:row?.pending??0,processing:row?.processing??0,budgetWaiting:row?.budgetWaiting??0,pricingWaiting:row?.pricingWaiting??0},hasKey);
     return NextResponse.json({
-      pauseReason,
+      pauseReason, failureCounts, lastFailureAt,
       pending: row?.pending ?? 0,
       processing: row?.processing ?? 0,
       done: row?.done ?? 0,

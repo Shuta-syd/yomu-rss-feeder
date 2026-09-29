@@ -44,3 +44,19 @@ describe('automatic article classification',()=>{
  it('generates summary and classification in one call',async()=>{seed(true);chat.mockResolvedValue({content:JSON.stringify({summary:'summary',tags:['AI'],titleJa:'食品ロボット',classification})});await processStage1ForArticles(['a']);const a=testDb.raw.prepare('select * from articles').get() as Record<string,unknown>;expect(a.ai_summary_short).toBe('summary');expect(JSON.parse(a.ai_tags as string)).toContain('業界:食品・農業');expect(chat).toHaveBeenCalledTimes(1);});
  it('rejects unsupported classification rather than claiming success',async()=>{seed(false);chat.mockResolvedValue({content:JSON.stringify({classification:{...classification,genre:'invented'}})});await processStage1ForArticles(['a']);expect((testDb.raw.prepare('select ai_stage1_status s from articles').get() as {s:string}).s).toBe('failed');});
 });
+it('retries a transient provider failure once and completes without losing existing data',async()=>{
+ seed(false);
+ const {LLMApiError}=await import('@/lib/llm/provider');
+ chat.mockRejectedValueOnce(new LLMApiError(503,'temporarily unavailable')).mockResolvedValue({content:JSON.stringify({classification})});
+ await processStage1ForArticles(['a']);
+ expect(testDb.raw.prepare('SELECT ai_stage1_status s,ai_summary_short summary FROM articles').get()).toEqual({s:'done',summary:'existing'});
+ expect(chat).toHaveBeenCalledTimes(2);
+});
+it('stops the batch on exhausted provider credits without repeatedly charging other articles',async()=>{
+ seed(false);testDb.raw.exec("INSERT INTO articles(id,feed_id,title,url,dedup_hash,sort_key,created_at) VALUES('b','f','Other','https://example.com/b','b',2,2)");
+ const {LLMApiError}=await import('@/lib/llm/provider');
+ chat.mockRejectedValue(new LLMApiError(429,'Your prepayment credits are depleted.'));
+ await processStage1ForArticles(['a','b']);
+ expect(chat).toHaveBeenCalledTimes(1);
+ expect(testDb.raw.prepare("SELECT count(*) n FROM articles WHERE ai_stage1_status='pending'").get()).toEqual({n:1});
+});

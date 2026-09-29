@@ -7,6 +7,7 @@ import { AnthropicProvider } from "./anthropic";
 
 export interface ChatParams {
   signal?: AbortSignal;
+  responseSchema?: Record<string, unknown>;
   systemPrompt: string;
   userPrompt: string;
   temperature?: number;

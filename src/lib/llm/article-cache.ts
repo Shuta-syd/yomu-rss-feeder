@@ -29,10 +29,11 @@ export async function reuseArticleResult(
     validate(content);
     return { content, reused: false };
   }
-  const { systemPrompt, userPrompt, purpose, temperature, maxOutputTokens } = request.params;
+  const { systemPrompt, userPrompt, purpose, temperature, maxOutputTokens, responseSchema } = request.params;
   const key = createHash('sha256').update(JSON.stringify([
     'article-result-v1', url, request.provider, request.model,
     systemPrompt, userPrompt, purpose, temperature ?? 0.3, maxOutputTokens,
+    ...(responseSchema === undefined ? [] : [responseSchema]),
   ])).digest('hex');
   const owner = randomUUID();
   const deadline = Date.now() + (purpose === 'detail' ? 125_000 : 35_000);

@@ -37,3 +37,15 @@ export function replaceClassificationTags(raw: string | null, classification: Ar
   } catch { /* Preserve valid non-classification tags only. */ }
   return JSON.stringify([...new Set([...other, ...classificationTags(classification)])]);
 }
+
+/** Gemini structured output: require every field instead of relying only on a JSON example. */
+export function stage1ResponseSchema(summarize:boolean):Record<string,unknown> {
+ const classification={type:'object',properties:{
+  genre:{type:'string',enum:classificationGroups[0]!.values},
+  industries:{type:'array',items:{type:'string',enum:classificationGroups[1]!.values},maxItems:3},
+  topics:{type:'array',items:{type:'string',enum:classificationGroups[2]!.values},maxItems:3},
+ },required:['genre','industries','topics'],additionalProperties:false};
+ return {type:'object',properties:{...(summarize?{
+  titleJa:{anyOf:[{type:'string'},{type:'null'}]},summary:{type:'string'},tags:{type:'array',items:{type:'string'},maxItems:3},detectedLanguage:{type:'string'},
+ }:{}),classification},required:summarize?['titleJa','summary','tags','detectedLanguage','classification']:['classification'],additionalProperties:false};
+}
