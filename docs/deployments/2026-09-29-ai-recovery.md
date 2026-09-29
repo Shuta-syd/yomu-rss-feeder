@@ -33,3 +33,13 @@ App and worker were recreated with all four existing Compose files and became he
 ## Cleanup
 
 Pending explicit deletion approval: the yomu-ai-recovery and yomu-jev-titles worktrees and branches, synthetic previews on 3392/3391, exited yomu-ai-recovery-verify containers and yomu-title-verify. Preserve backups, production DB, rollback images, and configuration. Current previews and local QA data are retained.
+
+## Follow-up: user requested zero remaining failures
+
+The user subsequently requested that the remaining 1,632 failures be cleared by recovery. Reprocessed them with the deployed schema-aware provider, without raising the existing daily 300-yen/monthly 3,000-yen caps. Three concurrent operations recovered 1,629 articles; the conservative reservation for an unusually long article then reached the remaining daily allowance. A disconnected SSH monitoring session did not interrupt the container process; its continuing execution was verified before any further action.
+
+The final three inputs were approximately 266k, 532k and 350k characters. A bounded one-off recovery used 12 evenly distributed 2,000-character excerpts for their one-line summaries and classifications. The prompt explicitly identified the excerpts and prohibited inventing missing details. This is not a full-text summary guarantee. Original article bodies were retained. These three calls cost a recorded 0.810525 yen and respected the same provider budget checks.
+
+Final DB verification: all 1,632 targeted IDs are done, none missing, no manual_classification values changed; failed/pending/processing counts all zero. Global done count 27,160 and skipped count 31,122 (previously skipped articles were not part of the failures). Public health returned 200. The recorded usage increase during the recovery window was 249.08625 yen, including any concurrent normal AI processing; daily recorded total 282.357636 yen, below 300 yen. These are application estimates, not provider invoice amounts.
+
+Private before snapshots, runner result and final verified.json remain under /data/ai-recovery-20260929/all-*/; scripts are retained in /opt/yomu-backups/20260929-ai-recovery/. No application code change or redeployment was needed for this follow-up. Existing cleanup remains pending explicit deletion approval.
