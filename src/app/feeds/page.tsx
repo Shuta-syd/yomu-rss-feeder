@@ -508,6 +508,8 @@ export default function FeedsPage() {
           pending: data.pending,
           processing: data.processing,
           failed: data.failed,
+          failureCounts: data.failureCounts,
+          lastFailureAt: data.lastFailureAt,
           currentTitle: data.currentTitle,
           currentFeedTitle: data.currentFeedTitle,
         };
@@ -517,6 +519,8 @@ export default function FeedsPage() {
           prev.pending === next.pending &&
           prev.processing === next.processing &&
           prev.failed === next.failed &&
+          JSON.stringify(prev.failureCounts) === JSON.stringify(next.failureCounts) &&
+          prev.lastFailureAt === next.lastFailureAt &&
           prev.currentTitle === next.currentTitle &&
           prev.currentFeedTitle === next.currentFeedTitle
             ? prev
