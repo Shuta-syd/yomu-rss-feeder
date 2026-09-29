@@ -53,11 +53,13 @@ To avoid another server-side compile, locally verified Next standalone/static an
 
 The production Jev key is unconfigured and the toggle remains OFF. No real Jev calls or real-article relevance/latency evaluation have been made. Register a TypeSafe key in Settings → AI → Jev検索, then validate queries such as 面接について against relevant paraphrases and unrelated recruitment news before relying on the initial score threshold.
 
-### Cleanup candidates (not authorized/deleted)
+### Cleanup completed after explicit user approval (2026-09-29)
 
-- `/home/shuta/Workspace/worktrees/yomu-jev-search` and local `feat/jev-search`: application changes merged into main. Approximately 1.2 GB of dependencies/builds and synthetic QA data; stopping its local server removes only the preview at 127.0.0.1:3392. No related local Docker bind mounts were found.
-- Server container `yomu-jev-verify`: isolated synthetic smoke-test data, no network or production mounts. May stop/remove the container after approval; do not remove its anonymous volume without explicitly including that scope.
-- Failed candidate image tag `yomu:jev-5c5b950`: not used by the final production containers. Do not remove `yomu:latest`, `yomu:jev-5c5b950-verified`, or the rollback image.
-- `/home/shuta/Workspace/backups/yomu-20260929-jev/uncompressed-transfer.partial`: interrupted duplicate transfer, superseded by the verified complete DB copy. Retain the complete backup and production backup directory.
+Rechecked the current branch, remote main, tracked/untracked/ignored files, active processes and local container parent bind mounts before removal. No new source changes or other work references were found. All task commits were already merged into main.
 
-Recheck current modifications, ignored files, branch use, process/container mounts and backups immediately before any approved deletion.
+- Stopped the local preview at 127.0.0.1:3392, then verified no remaining task processes. Preserved all seven QA config/data files in `/home/shuta/Workspace/backups/yomu-20260929-jev/preview-config-data.tar.gz` with SHA-256 manifest verification, private directory/file permissions.
+- Removed `/home/shuta/Workspace/worktrees/yomu-jev-search` using non-forced `git worktree remove`, and local `feat/jev-search` using `git branch -d`. Verified directory/registration/branch absence and that the preview port is closed.
+- Stopped and removed server container `yomu-jev-verify` without `-v`. Preserved its anonymous volume `a4965c63a68115621f0c0957f3215f1298409722ef15198ca1fb50bc3d7be862`, since data-volume removal was outside the approval. Its private inspect record is saved in `/opt/yomu-backups/20260929-jev-search/preview-container-before-removal.json`.
+- Removed only failed image tag `yomu:jev-5c5b950`. Kept the deployed image, verified image tag and rollback image.
+- Revalidated the complete local production DB backup SHA-256 before deleting `uncompressed-transfer.partial`. Kept all complete production backups, QA backup, deployment archives/logs, and the original-work backup stash.
+- Production Web remained healthy and public health returned HTTP 200 after cleanup.
