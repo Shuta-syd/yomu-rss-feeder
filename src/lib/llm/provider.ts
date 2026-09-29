@@ -1,3 +1,4 @@
+import { meteredProvider, type Usage } from "./usage";
 import type { ProviderType } from "../settings";
 import { getDecryptedKey } from "../settings";
 import { GeminiProvider } from "./gemini";
@@ -9,10 +10,13 @@ export interface ChatParams {
   userPrompt: string;
   temperature?: number;
   maxOutputTokens?: number;
+  purpose?: "summary_classification" | "classification" | "detail";
+  onUsage?: (usage: Usage) => void;
 }
 
 export interface ChatResult {
   content: string;
+  usageKnown?: boolean;
   inputTokens: number;
   outputTokens: number;
 }
@@ -64,10 +68,10 @@ export function createProvider(type: ProviderType, model: string): LLMProvider {
 
   switch (type) {
     case "gemini":
-      return new GeminiProvider(apiKey, model);
+      return meteredProvider(new GeminiProvider(apiKey, model), model);
     case "openai":
-      return new OpenAIProvider(apiKey, model);
+      return meteredProvider(new OpenAIProvider(apiKey, model), model);
     case "anthropic":
-      return new AnthropicProvider(apiKey, model);
+      return meteredProvider(new AnthropicProvider(apiKey, model), model);
   }
 }

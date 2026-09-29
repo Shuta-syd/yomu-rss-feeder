@@ -22,3 +22,9 @@ Dockerfile
 README.md
 *.md
 !package.json
+
+# Local databases and browser profiles must never enter release images.
+data
+*.db
+*.db-*
+artifacts

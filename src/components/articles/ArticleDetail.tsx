@@ -1,7 +1,15 @@
 "use client";
 
+import { ClassificationEditor } from "./ClassificationEditor";
+import { MemosArticleEditor } from "./MemosArticleEditor";
+import { ArticleFontSizeControl } from "@/components/layout/ArticleFontSizeControl";
+import { ArticleNavigation, type ArticleNavigationProps } from "./ArticleNavigation";
+import {rememberBrowserImport} from '@/lib/browser-import-resume';
+import { ReadLaterButton } from "./ReadLaterButton";
+
+import { cleanArticleDocument, isNikkeiArticle } from "@/lib/article-readability";
 import type { ArticleDTO } from "@/types/article";
-import { memo, useEffect, useState, useCallback, useMemo } from "react";
+import { memo, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import type { CSSProperties } from "react";
 import {
   scheduleNoteSave,
@@ -10,6 +18,7 @@ import {
 } from "@/lib/article-note-saver";
 
 function humanizeError(raw: string): string {
+  if (raw.includes("予算上限") || raw.includes("単価が未登録")) return raw;
   const s = raw.toLowerCase();
   if (s.includes("api key") || s.includes("apikey")) return "APIキーが設定されていません。設定画面で登録してください。";
   if (s.includes("rate") || s.includes("429") || s.includes("quota")) return "AIの利用上限に達しました。しばらくしてから再試行してください。";
@@ -20,7 +29,7 @@ function humanizeError(raw: string): string {
   return "AI処理に失敗しました。再試行してください。";
 }
 
-interface Props {
+interface Props extends ArticleNavigationProps {
   article: ArticleDTO | null;
   onChange: (a: ArticleDTO) => void;
 }
@@ -33,7 +42,7 @@ interface RelatedLink {
 // フォントサイズは --article-font-size を基準に比例拡大する。
 // 本文(p/li)は 1em = 基準サイズ、見出し・コードは em 比で連動させる
 // (level 3=15px のとき従来の 15/18/20/16/14px とほぼ一致)。
-const ARTICLE_PROSE_CLASS = `prose prose-neutral max-w-none dark:prose-invert
+const ARTICLE_PROSE_CLASS = `article-prose prose prose-neutral max-w-none dark:prose-invert
   prose-headings:font-bold prose-headings:tracking-tight
   prose-h1:text-[1.33em] prose-h2:text-[1.2em] prose-h3:text-[1.07em]
   prose-p:leading-[1.8]
@@ -53,13 +62,19 @@ const ARTICLE_PROSE_STYLE: CSSProperties = {
   "--tw-prose-quote-borders": "var(--accent)",
 } as CSSProperties;
 
-export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: Props) {
+export const ArticleDetail = memo(function ArticleDetail({ article, onChange, ...navigation }: Props) {
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
+  const [importNeedsAuth,setImportNeedsAuth]=useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [streamText, setStreamText] = useState("");
   const [showTranslation, setShowTranslation] = useState(false);
   const [stage1Loading, setStage1Loading] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, [article?.id]);
   const [note, setNote] = useState(article?.note ?? "");
+  const [memosOpen, setMemosOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(Boolean(article?.note));
   const [noteStatus, setNoteStatus] = useState<SaveStatus>("idle");
   const articleId = article?.id ?? null;
@@ -70,10 +85,19 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
     () => ({ __html: articleTranslation ?? "" }),
     [articleTranslation],
   );
-  const contentMarkup = useMemo(
-    () => ({ __html: articleContentHtml ?? "" }),
-    [articleContentHtml],
-  );
+  const articleUrl = article?.url ?? "";
+  const [cleanedContent, setCleanedContent] = useState<{source:string;html:string}|null>(null);
+  const [showOriginalContent, setShowOriginalContent] = useState(false);
+  useEffect(() => {
+    setShowOriginalContent(false);
+    if (!articleContentHtml) { setCleanedContent(null); return; }
+    const doc = new DOMParser().parseFromString(articleContentHtml, "text/html");
+    cleanArticleDocument(doc, articleUrl);
+    setCleanedContent({source:articleContentHtml,html:doc.body.innerHTML});
+  }, [articleContentHtml, articleUrl]);
+  const displayHtml = !showOriginalContent && cleanedContent?.source === articleContentHtml
+    ? cleanedContent.html : articleContentHtml ?? "";
+  const contentMarkup = useMemo(() => ({__html:displayHtml}), [displayHtml]);
 
   // 記事切替時に note state を初期化 (key prop で再マウントされるが、念のため)
   useEffect(() => {
@@ -92,7 +116,10 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
     try {
       const res = await fetch(`/api/articles/${article.id}/stage1`, { method: "POST" });
       if (res.ok) onChange(await res.json());
-      else alert("タイトル翻訳に失敗しました");
+      else {
+        const error = await res.json().catch(() => ({}));
+        alert(humanizeError(error.error ?? "タイトル翻訳に失敗しました"));
+      }
     } finally {
       setStage1Loading(false);
     }
@@ -190,7 +217,6 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
     if (res.ok) onChange(await res.json());
   }
 
-  const tags: string[] = article.aiTags ? JSON.parse(article.aiTags) : [];
   const keyPoints: string[] = article.aiKeyPoints ? JSON.parse(article.aiKeyPoints) : [];
   const relatedLinks: RelatedLink[] = article.aiRelatedLinks
     ? JSON.parse(article.aiRelatedLinks)
@@ -205,7 +231,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
       >
         <div className="article-detail-header-layout">
           <div className="min-w-0 flex-1">
-            <h1 className="break-words text-base font-bold leading-snug md:text-lg">
+            <h1 ref={headingRef} tabIndex={-1} className="break-words text-base font-bold leading-snug md:text-lg">
               {article.aiTitleJa ?? article.title}
             </h1>
             {article.aiTitleJa && (
@@ -232,7 +258,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
               </a>
             </div>
           </div>
-          <div className="flex max-w-full shrink-0 gap-1.5 overflow-x-auto">
+          <div className="article-detail-actions">
             <button
               onClick={runStage1}
               disabled={stage1Loading || article.aiStage1Status === "processing"}
@@ -240,7 +266,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
               style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
               title="タイトル翻訳・要約・タグを再生成"
             >
-              {stage1Loading || article.aiStage1Status === "processing" ? "翻訳中..." : "🌐 翻訳"}
+              {stage1Loading || article.aiStage1Status === "processing" ? "翻訳中..." : "翻訳"}
             </button>
             <button
               onClick={() => toggle("isStarred", !article.isStarred)}
@@ -256,6 +282,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
               <span className="text-sm text-yellow-500">{article.isStarred ? "★" : "☆"}</span>
               <span className="ml-1">お気に入り</span>
             </button>
+            <ReadLaterButton key={article.id} article={article} onChange={onChange}/>
             <button
               onClick={() => setNoteOpen((v) => !v)}
               className="shrink-0 rounded-md px-2.5 py-1.5 text-xs transition-colors"
@@ -267,7 +294,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
               title={note ? "メモあり" : "メモを追加"}
               aria-expanded={noteOpen}
             >
-              📝 {note ? "" : "メモ"}
+              {note ? "メモあり" : "メモ"}
             </button>
             <button
               onClick={() => toggle("isRead", !article.isRead)}
@@ -278,19 +305,15 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
             </button>
           </div>
         </div>
-        {tags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {tags.map((t) => (
-              <span
-                key={t}
-                className="rounded-full px-2.5 py-0.5 text-xs font-medium"
-                style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
-              >
-                {t}
-              </span>
-            ))}
+        <details className="article-text-settings">
+          <summary><span aria-hidden="true">Aa</span> 文字サイズ</summary>
+          <div className="article-text-settings-panel">
+            <p>本文の文字サイズ</p>
+            <ArticleFontSizeControl />
+            <span>このブラウザに保存されます</span>
           </div>
-        )}
+        </details>
+        <ClassificationEditor key={article.id} article={article} onChange={onChange} />
         {article.aiSummaryShort && (
           <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
             {article.aiSummaryShort}
@@ -318,11 +341,38 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
               {noteStatus === "saving" && "保存中..."}
               {noteStatus === "saved" && "✓ 保存済み"}
             </div>
+            <button type="button" className="mt-3 min-h-11 rounded-lg border px-3 text-xs" style={{borderColor:"var(--card-border)",color:"var(--accent)"}} aria-expanded={memosOpen} onClick={()=>setMemosOpen(v=>!v)}>Memosに保存・編集 {memosOpen?'−':'＋'}</button>
+            {memosOpen&&<MemosArticleEditor key={article.id} article={article} note={note}/>}
           </div>
         )}
       </header>
 
       <div className="mx-auto max-w-3xl px-4 py-5 md:px-6 md:py-6">
+        {isNikkeiArticle(article.url) && <section className="mb-5 rounded-lg border p-3 text-xs leading-relaxed" style={{borderColor:"var(--card-border)",color:"var(--muted)"}}>
+          <p>{article.browserImportedAt
+            ? `ブラウザーから取り込み済み：${new Date(article.browserImportedAt).toLocaleString("ja-JP")}`
+            : "本番の連携用Chromeが元記事を開き、本文を取り込みます。日経の自動ログインは「設定 → 連携」で登録できます。"}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <a href={article.url} target="_blank" rel="noopener noreferrer" className="underline">元記事を開く ↗</a>
+            <button disabled={importing || aiLoading || article.aiStage1Status === "processing" || article.aiStage2Status === "processing"} className="rounded px-3 py-1.5 disabled:opacity-50" style={{background:"var(--accent-subtle)",color:"var(--accent)"}} onClick={async()=>{
+              setImporting(true);setImportMessage("");setImportNeedsAuth(false);
+              try {
+                const res=await fetch(`/api/articles/${article.id}/browser-import`,{method:"POST"});
+                const result=await res.json();
+                if(!res.ok){
+                  if(result.requiresAuthentication){setImportNeedsAuth(true);try{rememberBrowserImport(sessionStorage,article.id);}catch{/* Storage may be unavailable in private browsing. */}}
+                  throw new Error(result.error ?? "取り込みに失敗しました");
+                }
+                onChange(result.article);setImportMessage(`${result.characters.toLocaleString()}文字を取り込みました`);
+              } catch(e){setImportMessage(e instanceof Error?e.message:"取り込みに失敗しました");}
+              finally{setImporting(false);}
+            }}>{importing?"取り込み中…":"ブラウザーの本文を取り込む"}</button>
+          </div>
+          <p className="mt-2">本文の取り込み自体にAI費用はかかりません。取り込み後の自動分類・要約は、設定した予算内で更新されます。</p>
+          {importMessage && <p className="mt-2" role="status">{importMessage}</p>}
+          {importNeedsAuth&&<a href="/settings?tab=integration" className="mt-3 inline-flex min-h-11 items-center rounded-lg px-3 font-medium" style={{background:"var(--accent-subtle)",color:"var(--accent)"}}>日経の認証を完了して取り込みを再開 →</a>}
+        </section>}
+
         {/* AI 要約・翻訳パネル */}
         <section
           className="mb-8 rounded-lg border p-5"
@@ -466,6 +516,11 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
                 </button>
               </div>
             )}
+            {!showTranslation && cleanedContent?.source === articleContentHtml && cleanedContent.html !== articleContentHtml && (
+              <button className="mb-3 text-xs underline" style={{color:"var(--muted)"}} onClick={() => setShowOriginalContent(v => !v)}>
+                {showOriginalContent ? "読みやすく整える" : "取得した本文をそのまま表示"}
+              </button>
+            )}
             {showTranslation && article.aiTranslation ? (
               <div
                 className={ARTICLE_PROSE_CLASS}
@@ -485,6 +540,7 @@ export const ArticleDetail = memo(function ArticleDetail({ article, onChange }: 
             本文を取得できませんでした
           </p>
         )}
+        <ArticleNavigation {...navigation} />
       </div>
     </article>
   );

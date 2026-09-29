@@ -57,7 +57,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 # Next.js のビルドキャッシュをマウントして 2 回目以降のビルドを高速化
 RUN --mount=type=cache,id=next-build,target=/app/.next/cache \
-    pnpm build && pnpm build:scripts
+    DATABASE_PATH=:memory: pnpm build && pnpm build:scripts
 
 # ==============================================================================
 # runner: 本番イメージ (Proxmox デプロイ対象)

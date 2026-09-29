@@ -16,7 +16,9 @@ export async function GET(req: NextRequest) {
     const result = listArticles({
       feedId: normalize(sp.get("feedId")),
       category: normalize(sp.get("category")),
+      classifications: sp.getAll("classification").filter(Boolean).slice(0, 3),
       isRead: isRead === null ? undefined : isRead === "true",
+      isReadLater: sp.has("isReadLater") ? sp.get("isReadLater") === "true" : undefined,
       isStarred: isStarred === null ? undefined : isStarred === "true",
       search: sp.get("search") ?? undefined,
       cursor: sp.get("cursor") ?? undefined,

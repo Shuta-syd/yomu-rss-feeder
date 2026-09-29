@@ -10,7 +10,7 @@ export class AnthropicProvider implements LLMProvider {
     apiKey: string,
     private model: string,
   ) {
-    this.client = new Anthropic({ apiKey });
+    this.client = new Anthropic({ apiKey, maxRetries: 0 });
   }
 
   async chat(params: ChatParams): Promise<ChatResult> {
@@ -27,6 +27,7 @@ export class AnthropicProvider implements LLMProvider {
         // normal
       }
 
+      params.onUsage?.({inputTokens:res.usage.input_tokens,outputTokens:res.usage.output_tokens,known:true});
       const textBlock = res.content.find((b) => b.type === "text");
       if (!textBlock || textBlock.type !== "text") throw new LLMEmptyResponseError();
 
@@ -56,7 +57,10 @@ export class AnthropicProvider implements LLMProvider {
         max_tokens: params.maxOutputTokens ?? 4096,
       });
 
+      let inputTokens=0;
       for await (const event of stream) {
+        if(event.type==="message_start") inputTokens=event.message.usage.input_tokens;
+        if(event.type==="message_delta") params.onUsage?.({inputTokens,outputTokens:event.usage.output_tokens,known:true});
         if (
           event.type === "content_block_delta" &&
           event.delta.type === "text_delta"

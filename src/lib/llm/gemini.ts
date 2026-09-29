@@ -8,7 +8,7 @@ interface GeminiResponse {
     safetyRatings?: unknown;
   }[];
   promptFeedback?: { blockReason?: string };
-  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
 }
 
 export class GeminiProvider implements LLMProvider {
@@ -43,6 +43,7 @@ export class GeminiProvider implements LLMProvider {
 
     const data = (await res.json()) as GeminiResponse;
 
+    params.onUsage?.({inputTokens:data.usageMetadata?.promptTokenCount??0, outputTokens:(data.usageMetadata?.candidatesTokenCount??0)+(data.usageMetadata?.thoughtsTokenCount??0),known:!!data.usageMetadata});
     if (!data.candidates || data.candidates.length === 0) {
       throw new LLMBlockedError(data.promptFeedback?.blockReason ?? "UNKNOWN");
     }
@@ -58,7 +59,8 @@ export class GeminiProvider implements LLMProvider {
     return {
       content,
       inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
-      outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+      outputTokens: (data.usageMetadata?.candidatesTokenCount ?? 0) + (data.usageMetadata?.thoughtsTokenCount ?? 0),
+      usageKnown: !!data.usageMetadata,
     };
   }
 
@@ -90,11 +92,10 @@ export class GeminiProvider implements LLMProvider {
     const decoder = new TextDecoder();
     let buffer = "";
 
+    try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
+      buffer += done ? decoder.decode() + "\n" : decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
 
@@ -104,12 +105,18 @@ export class GeminiProvider implements LLMProvider {
         if (!jsonStr) continue;
         try {
           const data = JSON.parse(jsonStr) as GeminiResponse;
+          if(data.usageMetadata) params.onUsage?.({inputTokens:data.usageMetadata.promptTokenCount??0,outputTokens:(data.usageMetadata.candidatesTokenCount??0)+(data.usageMetadata.thoughtsTokenCount??0),known:true});
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text) yield text;
         } catch {
           // skip malformed SSE chunks
         }
       }
+      if (done) break;
+    }
+    } finally {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
     }
   }
 }

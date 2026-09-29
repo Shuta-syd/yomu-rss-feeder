@@ -1,0 +1,39 @@
+# Optional production browser. No CDP ports are published to the host or Internet.
+services:
+  app:
+    environment:
+      YOMU_BROWSER_CDP_URL: http://yomu-browser:9223
+    networks:
+      - default
+      - browser
+  worker:
+    environment:
+      YOMU_BROWSER_CDP_URL: http://yomu-browser:9223
+    networks:
+      - default
+      - browser
+  yomu-browser:
+    build:
+      context: ./browser
+    image: yomu-browser:local
+    restart: unless-stopped
+    init: false
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 1536m
+    shm_size: 256m
+    volumes:
+      - yomu-browser-profile:/profile
+    networks:
+      - browser
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://127.0.0.1:9222/json/version]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+networks:
+  browser:
+volumes:
+  yomu-browser-profile:

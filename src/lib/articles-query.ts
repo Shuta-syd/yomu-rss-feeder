@@ -6,8 +6,11 @@ export type ArticleWithFeed = Article & { feedTitle: string | null };
 export interface ArticleListParams {
   feedId?: string;
   category?: string;
+  classification?: string;
+  classifications?: string[];
   isRead?: boolean;
   isStarred?: boolean;
+  isReadLater?: boolean;
   search?: string;
   cursor?: string;
   limit?: number;
@@ -52,11 +55,13 @@ export function rowToArticle(row: Record<string, unknown>): ArticleWithFeed {
     detectedLanguage: (row["detected_language"] as string | null) ?? null,
     dedupHash: row["dedup_hash"] as string,
     isRead: Boolean(row["is_read"]),
+    isReadLater: Boolean(row["is_read_later"]),
     isStarred: Boolean(row["is_starred"]),
     readAt: (row["read_at"] as number | null) ?? null,
     aiSummaryShort: (row["ai_summary_short"] as string | null) ?? null,
     aiTitleJa: (row["ai_title_ja"] as string | null) ?? null,
     aiTags: (row["ai_tags"] as string | null) ?? null,
+    manualClassification: (row["manual_classification"] as string | null) ?? null,
     aiStage1Status: row["ai_stage1_status"] as string,
     aiStage1Error: (row["ai_stage1_error"] as string | null) ?? null,
     aiStage1ProcessedAt: (row["ai_stage1_processed_at"] as number | null) ?? null,
@@ -69,6 +74,7 @@ export function rowToArticle(row: Record<string, unknown>): ArticleWithFeed {
     aiStage2ProcessedAt: (row["ai_stage2_processed_at"] as number | null) ?? null,
     note: (row["note"] as string | null) ?? null,
     createdAt: row["created_at"] as number,
+    browserImportedAt: (row["browser_imported_at"] as number | null) ?? null,
   };
 }
 
@@ -84,9 +90,17 @@ export function listArticles(params: ArticleListParams): ArticleListResult {
     where.push("a.feed_id IN (SELECT id FROM feeds WHERE category = ?)");
     values.push(params.category);
   }
+  for (const classification of new Set([...(params.classifications ?? []), ...(params.classification ? [params.classification] : [])])) {
+    where.push("EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(a.ai_tags) THEN a.ai_tags ELSE '[]' END) WHERE value = ?)");
+    values.push(classification);
+  }
   if (params.isRead !== undefined) {
     where.push("a.is_read = ?");
     values.push(params.isRead ? 1 : 0);
+  }
+  if (params.isReadLater !== undefined) {
+    where.push("a.is_read_later = ?");
+    values.push(params.isReadLater ? 1 : 0);
   }
   if (params.isStarred !== undefined) {
     where.push("a.is_starred = ?");

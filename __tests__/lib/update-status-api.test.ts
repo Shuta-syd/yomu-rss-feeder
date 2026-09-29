@@ -1,0 +1,13 @@
+import {beforeAll,beforeEach,it,expect,vi} from 'vitest';
+import {createTestDb} from '../helpers/test-db';
+let testDb:ReturnType<typeof createTestDb>;
+vi.mock('@/lib/db',()=>({get db(){return testDb.db},get rawDb(){return testDb.raw}}));
+vi.mock('@/lib/api-helpers',()=>({withAuth:async(fn:()=>Promise<unknown>)=>fn()}));
+vi.mock('@/lib/settings',()=>({getSettings:()=>({stage1Provider:'gemini',hasGeminiApiKey:true})}));
+import {GET as aiStatus} from '@/app/api/ai/status/route';
+import {GET as feedStatus} from '@/app/api/feeds/status/route';
+beforeAll(()=>{testDb=createTestDb()});
+beforeEach(()=>{testDb.raw.exec("DELETE FROM articles;DELETE FROM feeds;INSERT INTO feeds(id,title,url,created_at,last_fetch_status,last_fetch_error) VALUES('f','Example','https://example.com',1,'error','Feed fetch failed: 403 https://example.com/?token=secret');INSERT INTO articles(id,feed_id,title,url,dedup_hash,sort_key,created_at,ai_stage1_status) VALUES('a','f','Article','https://example.com/a','a',1,1,'pending')");});
+it('reports an actual budget rejection separately from normal pending articles',async()=>{expect((await(await aiStatus()).json()).pauseReason).toBeNull();testDb.raw.prepare('UPDATE articles SET ai_stage1_error=?').run('AIの概算予算上限に達しました。');const r=await(await aiStatus()).json();expect(r.pending).toBe(1);expect(r.pauseReason).toBe('budget');});
+it('stops reporting a budget hold once the article resumes',async()=>{testDb.raw.prepare("UPDATE articles SET ai_stage1_status='processing',ai_stage1_error=?").run('AIの概算予算上限に達しました。');expect((await(await aiStatus()).json()).pauseReason).toBeNull();});
+it('returns status without raw error URLs',async()=>{const r=await(await feedStatus()).json();expect(r.feeds).toHaveLength(1);expect(r.feeds[0].lastFetchError).toContain('403');expect(JSON.stringify(r)).not.toContain('secret');expect(r.feeds[0]).not.toHaveProperty('url');});

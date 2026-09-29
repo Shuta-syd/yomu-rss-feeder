@@ -10,7 +10,7 @@ export class OpenAIProvider implements LLMProvider {
     apiKey: string,
     private model: string,
   ) {
-    this.client = new OpenAI({ apiKey });
+    this.client = new OpenAI({ apiKey, maxRetries: 0 });
   }
 
   async chat(params: ChatParams): Promise<ChatResult> {
@@ -26,6 +26,7 @@ export class OpenAIProvider implements LLMProvider {
         response_format: { type: "json_object" },
       });
 
+      if(res.usage) params.onUsage?.({inputTokens:res.usage.prompt_tokens,outputTokens:res.usage.completion_tokens,known:true});
       const content = res.choices[0]?.message?.content;
       if (!content) throw new LLMEmptyResponseError();
 
@@ -58,9 +59,11 @@ export class OpenAIProvider implements LLMProvider {
         max_tokens: params.maxOutputTokens ?? 4096,
         response_format: { type: "json_object" },
         stream: true,
+        stream_options: { include_usage: true },
       });
 
       for await (const chunk of stream) {
+        if(chunk.usage) params.onUsage?.({inputTokens:chunk.usage.prompt_tokens,outputTokens:chunk.usage.completion_tokens,known:true});
         const text = chunk.choices[0]?.delta?.content;
         if (text) yield text;
       }

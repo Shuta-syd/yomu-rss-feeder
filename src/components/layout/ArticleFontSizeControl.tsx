@@ -15,12 +15,13 @@ export function ArticleFontSizeControl() {
   const [level, setLevel] = useState<FontSizeLevel | null>(null);
 
   useEffect(() => {
-    setLevel(parseFontSizeLevel(localStorage.getItem(FONT_SIZE_STORAGE_KEY)));
+    try { setLevel(parseFontSizeLevel(localStorage.getItem(FONT_SIZE_STORAGE_KEY))); }
+    catch { setLevel(parseFontSizeLevel(null)); }
   }, []);
 
   function select(next: FontSizeLevel) {
     setLevel(next);
-    localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(next));
+    try { localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(next)); } catch { /* Still apply the size when storage is unavailable. */ }
     applyArticleFontSize(next);
   }
 

@@ -1,5 +1,8 @@
+import { AIResultBusyError, reuseArticleResult } from "./article-cache";
+import type { ChatParams } from "./provider";
+import { LLMBudgetError } from "./usage";
 import { and, eq, inArray } from "drizzle-orm";
-import { db } from "../db";
+import { db, rawDb } from "../db";
 import { articles, feeds } from "../db/schema";
 import { getSettings } from "../settings";
 import { createProvider, LLMBlockedError, LLMNoApiKeyError } from "./provider";
@@ -12,10 +15,13 @@ import {
 } from "./prompts";
 import { parseAndValidate, stage1Schema } from "./parse-response";
 
+import { classificationSchema, classificationOnlySchema, readManualClassification, replaceClassificationTags, CLASSIFICATION_INSTRUCTIONS } from "./classification";
+const classifiedStage1Schema = stage1Schema.extend({ classification: classificationSchema });
+
 const BATCH_TIMEOUT_MS = 5 * 60 * 1000;
 const RATE_LIMIT_MS = 250;
 
-export async function processStage1ForArticles(articleIds: string[]): Promise<void> {
+export async function processStage1ForArticles(articleIds: string[], options: { forceSummary?: boolean } = {}): Promise<void> {
   if (articleIds.length === 0) return;
   const settings = getSettings();
 
@@ -33,47 +39,72 @@ export async function processStage1ForArticles(articleIds: string[]): Promise<vo
   if (!provider) return;
 
   const rows = db
-    .select({ article: articles, summaryLens: feeds.summaryLens })
+    .select({ article: articles, summaryLens: feeds.summaryLens, aiEnabled: feeds.aiEnabled })
     .from(articles)
     .innerJoin(feeds, eq(articles.feedId, feeds.id))
     .where(and(inArray(articles.id, articleIds), eq(articles.aiStage1Status, "pending")))
     .all();
 
   const start = Date.now();
-  for (const { article, summaryLens } of rows) {
+  for (const { article, summaryLens, aiEnabled } of rows) {
     if (Date.now() - start > BATCH_TIMEOUT_MS) {
       console.warn("[yomu] stage1: batch timeout");
       break;
     }
 
-    db.update(articles)
+    const claimed = db.update(articles)
       .set({ aiStage1Status: "processing" })
-      .where(eq(articles.id, article.id))
+      .where(and(eq(articles.id, article.id), eq(articles.aiStage1Status, "pending")))
       .run();
+    if (!claimed.changes) continue;
 
     try {
+      const summarize = aiEnabled || options.forceSummary === true;
       const isJp = isJapaneseTitle(article.title);
-      const result = await provider.chat({
-        systemPrompt: composeStage1System(isJp ? STAGE1_SYSTEM_JP : STAGE1_SYSTEM, summaryLens),
-        userPrompt: stage1UserPrompt(article.title, article.contentPlain ?? ""),
+      const params: ChatParams = {
+        systemPrompt: (summarize
+          ? composeStage1System(isJp ? STAGE1_SYSTEM_JP : STAGE1_SYSTEM, summaryLens)
+          : "記事を分類してください。要約・翻訳は生成せずclassificationだけをJSONで返してください。") + CLASSIFICATION_INSTRUCTIONS,
+        userPrompt: stage1UserPrompt(article.title, summarize ? (article.contentPlain ?? "") : (article.contentPlain ?? "").slice(0, 6000)),
+        maxOutputTokens: 2048,
+        purpose: summarize ? "summary_classification" : "classification",
+      };
+      const result = await reuseArticleResult({
+        url: article.url, provider: settings.stage1Provider, model: settings.geminiModelStage1,
+        params, fresh: options.forceSummary === true,
+      }, async () => (await provider.chat(params)).content, content => {
+        parseAndValidate(content, summarize ? classifiedStage1Schema : classificationOnlySchema);
       });
-      const parsed = parseAndValidate(result.content, stage1Schema);
-      db.update(articles)
-        .set({
-          aiSummaryShort: parsed.summary,
-          aiTitleJa: parsed.titleJa ?? null,
-          aiTags: JSON.stringify(parsed.tags),
-          detectedLanguage: parsed.detectedLanguage ?? article.detectedLanguage,
-          aiStage1Status: "done",
-          aiStage1Error: null,
-          aiStage1ProcessedAt: Date.now(),
-        })
-        .where(eq(articles.id, article.id))
-        .run();
-    } catch (e) {
-      if (e instanceof LLMNoApiKeyError) {
+      const parsed = summarize ? parseAndValidate(result.content, classifiedStage1Schema) : null;
+      const classification = parsed?.classification ?? parseAndValidate(result.content, classificationOnlySchema).classification;
+      // Read the latest manual choice and save atomically: edits during generation win.
+      rawDb.transaction(() => {
+        const current = db.select().from(articles).where(eq(articles.id, article.id)).get();
+        if (!current) return;
+        const effective = readManualClassification(current.manualClassification) ?? classification;
         db.update(articles)
-          .set({ aiStage1Status: "pending" })
+          .set({
+            ...(parsed ? {
+              aiSummaryShort: parsed.summary,
+              aiTitleJa: parsed.titleJa ?? null,
+              detectedLanguage: parsed.detectedLanguage ?? current.detectedLanguage,
+            } : {}),
+            aiTags: replaceClassificationTags(parsed ? JSON.stringify(parsed.tags) : current.aiTags, effective),
+            aiStage1Status: "done",
+            aiStage1Error: null,
+            aiStage1ProcessedAt: Date.now(),
+          })
+          .where(eq(articles.id, article.id)).run();
+      }).immediate();
+    } catch (e) {
+      if (e instanceof AIResultBusyError) {
+        db.update(articles).set({ aiStage1Status: "pending", aiStage1Error: e.message })
+          .where(eq(articles.id, article.id)).run();
+        continue;
+      }
+      if (e instanceof LLMNoApiKeyError || e instanceof LLMBudgetError) {
+        db.update(articles)
+          .set({ aiStage1Status: "pending", aiStage1Error: e.message })
           .where(eq(articles.id, article.id))
           .run();
         break;

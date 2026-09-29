@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { articles, feeds } from "@/lib/db/schema";
+import {getSettings} from "@/lib/settings";
+import {aiPauseReason} from "@/lib/update-status";
 import { withAuth } from "@/lib/api-helpers";
 
 export async function GET() {
   return withAuth(async () => {
     const row = db
       .select({
+        budgetWaiting: sql<number>`SUM(CASE WHEN ${articles.aiStage1Status} = 'pending' AND ${articles.aiStage1Error} LIKE 'AIの概算予算上限%' THEN 1 ELSE 0 END)`,
+        pricingWaiting: sql<number>`SUM(CASE WHEN ${articles.aiStage1Status} = 'pending' AND ${articles.aiStage1Error} LIKE 'このモデルの単価が未登録%' THEN 1 ELSE 0 END)`,
         pending: sql<number>`SUM(CASE WHEN ${articles.aiStage1Status} = 'pending' THEN 1 ELSE 0 END)`,
         processing: sql<number>`SUM(CASE WHEN ${articles.aiStage1Status} = 'processing' THEN 1 ELSE 0 END)`,
         done: sql<number>`SUM(CASE WHEN ${articles.aiStage1Status} = 'done' THEN 1 ELSE 0 END)`,
@@ -28,7 +32,11 @@ export async function GET() {
       .limit(1)
       .get();
 
+    const settings=getSettings();
+    const hasKey={gemini:settings.hasGeminiApiKey,openai:settings.hasOpenaiApiKey,anthropic:settings.hasAnthropicApiKey}[settings.stage1Provider];
+    const pauseReason=aiPauseReason({pending:row?.pending??0,processing:row?.processing??0,budgetWaiting:row?.budgetWaiting??0,pricingWaiting:row?.pricingWaiting??0},hasKey);
     return NextResponse.json({
+      pauseReason,
       pending: row?.pending ?? 0,
       processing: row?.processing ?? 0,
       done: row?.done ?? 0,

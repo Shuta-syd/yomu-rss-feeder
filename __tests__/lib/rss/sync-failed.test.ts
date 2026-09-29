@@ -1,0 +1,10 @@
+import {beforeEach,it,expect,vi} from 'vitest';
+const m=vi.hoisted(()=>({rows:[],fetch:vi.fn(),acquire:vi.fn(),refresh:vi.fn(),release:vi.fn(),due:vi.fn()}));
+vi.mock('@/lib/db',()=>({db:{select:()=>({from:()=>({all:()=>m.rows})})}}));
+vi.mock('@/lib/rss/fetcher',()=>({fetchFeedWithOptions:m.fetch,shouldFetch:m.due}));
+vi.mock('@/lib/rss/sync-lock',()=>({acquireSyncLock:m.acquire,refreshSyncLock:m.refresh,releaseSyncLock:m.release}));
+import {syncAllFeeds} from '@/lib/rss/sync';
+beforeEach(()=>{vi.clearAllMocks();m.rows=[{id:'ok',url:'https://example.com/ok',lastFetchStatus:'ok'},{id:'bad',url:'https://example.com/bad',lastFetchStatus:'error'}] as never[];m.acquire.mockReturnValue({token:'test'});m.refresh.mockReturnValue(true);m.due.mockReturnValue(false);m.fetch.mockResolvedValue({ok:true,newArticles:0});});
+it('retries only currently failed feeds even before the next scheduled time',async()=>{const r=await syncAllFeeds({failedOnly:true});expect(m.fetch).toHaveBeenCalledTimes(1);expect(m.fetch).toHaveBeenCalledWith('bad','https://example.com/bad');expect(r.updated).toBe(1);expect(m.release).toHaveBeenCalled();});
+it('respects the existing sync lock',async()=>{m.acquire.mockReturnValue(null);expect((await syncAllFeeds({failedOnly:true})).locked).toBe(true);expect(m.fetch).not.toHaveBeenCalled();});
+it('does nothing when all feeds have recovered',async()=>{m.rows=[];expect((await syncAllFeeds({failedOnly:true})).updated).toBe(0);expect(m.fetch).not.toHaveBeenCalled();});

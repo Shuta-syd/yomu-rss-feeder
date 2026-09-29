@@ -136,8 +136,6 @@ export async function fetchFeedWithOptions(
   options: FetchFeedOptions = {},
 ): Promise<FetchResult> {
   const now = Date.now();
-  const feedRow = db.select({ aiEnabled: feeds.aiEnabled }).from(feeds).where(eq(feeds.id, feedId)).get();
-  const aiEnabled = feedRow?.aiEnabled ?? true;
   const maxItems = options.maxItems ?? MAX_FEED_ITEMS;
   const maxFullContentFetches =
     options.maxFullContentFetches ?? MAX_FULL_CONTENT_FETCHES_PER_FEED;
@@ -243,12 +241,12 @@ export async function fetchFeedWithOptions(
           `${item.title ?? ""} ${contentPlain?.slice(0, 200) ?? ""}`,
         ),
         dedupHash,
-        aiStage1Status: aiEnabled ? "pending" : "skipped",
+        aiStage1Status: "pending",
       })
       .onConflictDoNothing({ target: [articles.feedId, articles.dedupHash] })
       .run();
 
-    if (result.changes > 0 && aiEnabled) newIds.push(id);
+    if (result.changes > 0) newIds.push(id);
   }
 
   const siteUrl = parsed.link?.trim() || null;

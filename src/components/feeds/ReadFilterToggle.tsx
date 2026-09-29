@@ -15,32 +15,8 @@ const OPTIONS: { value: ReadFilter; label: string; title: string }[] = [
 
 export function ReadFilterToggle({ value, onChange }: Props) {
   return (
-    <div
-      className="flex shrink-0 overflow-hidden rounded text-xs"
-      style={{ border: "1px solid var(--card-border)" }}
-      role="radiogroup"
-      aria-label="既読フィルタ"
-    >
-      {OPTIONS.map((opt) => {
-        const active = value === opt.value;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            title={opt.title}
-            onClick={() => onChange(opt.value)}
-            className="px-2 py-1"
-            style={{
-              background: active ? "var(--accent-subtle)" : "var(--card)",
-              fontWeight: active ? 600 : 400,
-            }}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
+    <div className="reader-read-toggle" role="group" aria-label="既読フィルタ">
+      {OPTIONS.map(opt=><button key={opt.value} type="button" aria-pressed={value===opt.value} title={opt.title} onClick={()=>onChange(opt.value)}>{opt.label}</button>)}
     </div>
   );
 }

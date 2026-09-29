@@ -109,3 +109,29 @@ describe("listArticles - category filter", () => {
     expect(result.total).toBe(0);
   });
 });
+
+describe("listArticles - article classification", () => {
+  beforeEach(() => { testDb.raw.exec("DELETE FROM articles; DELETE FROM feeds;"); });
+  it("filters across feeds before pagination and tolerates missing or malformed tags", () => {
+    insertFeed("f1", "News", "Business"); insertFeed("f2", "Bookmarks", "Blog");
+    for (const [id,feed,date,tags] of [["a1","f1",1,'["業界:食品・農業"]'],["a2","f2",2,'["業界:食品・農業"]'],["a3","f2",3,'not json'],["a4","f1",4,null]] as const) {
+      insertArticle(id,feed,date); testDb.raw.prepare("UPDATE articles SET ai_tags=? WHERE id=?").run(tags,id);
+    }
+    const first=listArticles({classification:"業界:食品・農業",limit:1});
+    expect(first.total).toBe(2); expect(first.articles.map(a=>a.id)).toEqual(["a2"]);
+    expect(listArticles({classification:"業界:食品・農業",cursor:first.nextCursor!,limit:1}).articles.map(a=>a.id)).toEqual(["a1"]);
+    expect(listArticles({classification:"業界:食品・農業",feedId:"f1"}).articles.map(a=>a.id)).toEqual(["a1"]);
+  });
+});
+
+describe('combined classification intersection',()=>{
+ it('requires every selected axis before pagination',()=>{
+  testDb.raw.exec('DELETE FROM articles; DELETE FROM feeds;');insertFeed('f','Feed','Business');
+  for(const [id,key,tags] of [['a',400,['業界:食品・農業','テーマ:AI']],['b',300,['業界:食品・農業']],['c',200,['テーマ:AI']],['d',100,['業界:食品・農業','テーマ:AI']]] as const){
+   insertArticle(id,'f',key);testDb.raw.prepare('UPDATE articles SET ai_tags=? WHERE id=?').run(JSON.stringify(tags),id);
+  }
+  const first=listArticles({classifications:['業界:食品・農業','テーマ:AI'],limit:1});
+  expect(first.articles.map(a=>a.id)).toEqual(['a']);expect(first.total).toBe(2);
+  expect(listArticles({classifications:['業界:食品・農業','テーマ:AI'],cursor:first.nextCursor!,limit:1}).articles.map(a=>a.id)).toEqual(['d']);
+ });
+});

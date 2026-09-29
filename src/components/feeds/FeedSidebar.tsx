@@ -1,5 +1,7 @@
 "use client";
 
+import { ReaderIcon } from "@/components/ui/ReaderIcon";
+
 import type { FeedWithUnread } from "@/types/feed";
 import type { SavedSiteDTO } from "@/types/site";
 import { useState, useRef, useEffect, useMemo } from "react";
@@ -22,8 +24,10 @@ interface Props {
   onCategoryRenamed?: (oldName: string, newName: string) => void;
   isMobile?: boolean;
   onCollapse?: () => void;
-  view?: "feeds" | "starred";
+  view?: "feeds" | "starred" | "later";
   onSelectStarred?: () => void;
+  onSelectLater?: () => void;
+  readLaterCount?: number;
 }
 
 function formatFeedFetchFailure(feed: FeedWithUnread): string {
@@ -112,6 +116,8 @@ export function FeedSidebar({
   onCollapse,
   view = "feeds",
   onSelectStarred,
+  onSelectLater,
+  readLaterCount = 0,
 }: Props) {
   const grouped = feeds.reduce<Record<string, FeedWithUnread[]>>((acc, f) => {
     (acc[f.category] ??= []).push(f);
@@ -213,77 +219,35 @@ export function FeedSidebar({
 
   return (
     <aside
-      className={`flex h-full flex-col border-r ${isMobile ? "w-full" : "w-64 shrink-0"}`}
+      className={`flex h-full flex-col border-r ${selectMode ? "reader-select-mode" : ""} ${isMobile ? "w-full" : "w-64 shrink-0"}`}
       style={{ background: "var(--sidebar-bg)", borderColor: "var(--card-border)" }}
       aria-label="フィード一覧"
     >
-      <div className="flex items-center justify-between border-b p-3" style={{ borderColor: "var(--card-border)" }}>
-        <h1 className="flex items-center gap-1.5 font-semibold">
-          <img src="/icons/icon.svg" alt="" className="h-5 w-5 rounded" />
-          <span>Yomu</span>
-        </h1>
-        <div className="flex gap-1">
-          {!selectMode && (
-            <>
-              <button
-                onClick={enterSelectMode}
-                className="rounded px-2 py-1 text-xs"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-                title="フィードを選択して一括削除"
-              >
-                ☑
-              </button>
-              <button
-                onClick={onSync}
-                disabled={syncing}
-                className="rounded px-2 py-1 text-xs"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-              >
-                {syncing ? "..." : "↻"}
-              </button>
-              <button
-                onClick={onLogout}
-                className="rounded px-2 py-1 text-xs"
-                style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-                title="Logout"
-              >
-                ⎋
-              </button>
-            </>
-          )}
-          {selectMode && (
-            <span className="text-xs" style={{ color: "var(--muted)" }}>
-              選択モード
-            </span>
-          )}
-          {onCollapse && (
-            <button
-              type="button"
-              onClick={onCollapse}
-              data-sidebar-close
-              className="rounded px-2 py-1 text-xs"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-              title="フィード一覧を閉じる"
-              aria-label="フィード一覧を閉じる"
-              aria-controls="feed-sidebar-panel"
-              aria-expanded="true"
-            >
-              ‹
-            </button>
-          )}
+      <div className="reader-sidebar-header">
+        <div className="reader-sidebar-brand">
+          <h1 className="flex items-center gap-2 font-semibold"><img src="/icons/icon.svg" alt="" className="h-6 w-6 rounded"/><span>Yomu</span></h1>
+          {onCollapse&&<button type="button" onClick={onCollapse} data-sidebar-close className="reader-icon-button" title="フィード一覧を閉じる" aria-label="フィード一覧を閉じる" aria-controls="feed-sidebar-panel" aria-expanded="true"><ReaderIcon name={isMobile ? "close" : "back"}/></button>}
+        </div>
+        <div className="reader-sidebar-actions">
+          {!selectMode ? <>
+            <button onClick={enterSelectMode} title="フィードを選択して一括削除"><ReaderIcon name="check"/>編集</button>
+            <button onClick={onSync} disabled={syncing} title="フィードを更新"><ReaderIcon name="refresh"/>{syncing?'更新中':'更新'}</button>
+            <button onClick={onLogout} title="ログアウト"><ReaderIcon name="logout"/>ログアウト</button>
+          </> : <div className="reader-selection-heading"><div><strong>フィードを整理</strong><span role="status">{selectedIds.size}件を選択中</span></div><p>削除するフィードを選んでください</p></div>}
         </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 text-sm" aria-label="フィードとカテゴリ">
         {selectMode ? (
-          <label className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1">
+          <label className="reader-select-all">
             <input
               type="checkbox"
               checked={allSelected}
+              ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !allSelected; }}
               onChange={toggleAll}
               className="h-3.5 w-3.5"
             />
-            <span>全選択</span>
+            <span>すべて選択</span>
             <span className="ml-auto" style={{ color: "var(--muted)" }}>
               {selectedIds.size}/{allFeedIds.length}
             </span>
@@ -317,6 +281,7 @@ export function FeedSidebar({
               <span className="text-yellow-500">★</span>
               <span>お気に入り</span>
             </button>
+            <button type="button" onClick={onSelectLater} className="reader-later-nav" aria-current={view === "later" ? "page" : undefined}><ReaderIcon name="bookmark"/><span>あとで読む</span><span>{readLaterCount}</span></button>
             <SavedSitesBlock sites={sites} onSitesChanged={onSitesChanged} />
           </>
         )}
@@ -343,7 +308,7 @@ export function FeedSidebar({
 
       <div className="border-t p-2" style={{ borderColor: "var(--card-border)" }}>
         {selectMode ? (
-          <div className="flex gap-2">
+          <div className="reader-selection-footer">
             <button
               onClick={exitSelectMode}
               disabled={deleting}
@@ -472,7 +437,7 @@ function CategoryGroup({
       }}
     >
       {selectMode ? (
-        <label className="flex cursor-pointer items-center gap-2 px-2 text-xs uppercase" style={{ color: "var(--muted)" }}>
+        <label className="reader-select-category">
           <input
             type="checkbox"
             checked={catAllChecked}
@@ -480,7 +445,7 @@ function CategoryGroup({
             onChange={() => onToggleCategory(category)}
             className="h-3.5 w-3.5"
           />
-          <span>{category}</span>
+          <span className="min-w-0 flex-1 truncate">{category}</span><span className="reader-selection-count">{feeds.filter(f => selectedIds.has(f.id)).length}/{feeds.length}</span>
         </label>
       ) : editing ? (
         <input
@@ -530,8 +495,9 @@ function CategoryGroup({
         <div className="mt-1">
           {feeds.map((f) => {
             const checked = selectedIds.has(f.id);
+            const Row = selectMode ? "label" : "button";
             return (
-              <button
+              <Row
                 key={f.id}
                 draggable={!selectMode}
                 onDragStart={(e) => {
@@ -541,9 +507,9 @@ function CategoryGroup({
                   e.dataTransfer.setData("text/plain", f.id);
                 }}
                 onDragEnd={() => onDragStart(null)}
-                onClick={() => (selectMode ? onToggleFeed(f.id) : onSelect(f.id))}
+                onClick={selectMode ? undefined : () => onSelect(f.id)}
                 className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left ${
-                  selectMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"
+                  selectMode ? "reader-select-feed cursor-pointer" : "cursor-grab active:cursor-grabbing"
                 }`}
                 style={{
                   background:
@@ -560,11 +526,11 @@ function CategoryGroup({
                     checked={checked}
                     onChange={() => onToggleFeed(f.id)}
                     onClick={(e) => e.stopPropagation()}
+                    aria-label={`${f.title}を選択`}
                     className="h-3.5 w-3.5 shrink-0"
                   />
-                ) : (
-                  <FeedIcon url={f.faviconUrl} title={f.title} />
-                )}
+                ) : null}
+                <FeedIcon url={f.faviconUrl} title={f.title} />
                 <span className="min-w-0 flex-1 truncate">{f.title}</span>
                 {!selectMode && f.consecutiveFetchFailures >= 3 && (
                   <span
@@ -580,7 +546,7 @@ function CategoryGroup({
                     {f.unreadCount}
                   </span>
                 )}
-              </button>
+              </Row>
             );
           })}
         </div>

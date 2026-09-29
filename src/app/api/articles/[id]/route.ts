@@ -1,3 +1,4 @@
+import { classificationSchema, replaceClassificationTags } from "@/lib/llm/classification";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
@@ -27,8 +28,10 @@ export async function GET(
 }
 
 const patchSchema = z.object({
+  classification: classificationSchema.optional(),
   isRead: z.boolean().optional(),
   isStarred: z.boolean().optional(),
+  isReadLater: z.boolean().optional(),
   note: z.string().nullable().optional(),
 });
 
@@ -47,6 +50,7 @@ export async function PATCH(
 
     const updates: Partial<typeof articles.$inferInsert> = {};
     if (parsed.data.isRead !== undefined) updates.isRead = parsed.data.isRead;
+    if (parsed.data.isReadLater !== undefined) updates.isReadLater = parsed.data.isReadLater;
     if (parsed.data.isStarred !== undefined) updates.isStarred = parsed.data.isStarred;
     if ("note" in parsed.data) {
       const trimmed = parsed.data.note?.trim();
@@ -59,9 +63,15 @@ export async function PATCH(
       updates.readAt = null;
     }
 
-    if (Object.keys(updates).length > 0) {
-      db.update(articles).set(updates).where(eq(articles.id, id)).run();
-    }
+    rawDb.transaction(() => {
+      if (parsed.data.classification) {
+        const current = db.select().from(articles).where(eq(articles.id, id)).get();
+        if (!current) return;
+        updates.manualClassification = JSON.stringify(parsed.data.classification);
+        updates.aiTags = replaceClassificationTags(current.aiTags, parsed.data.classification);
+      }
+      if (Object.keys(updates).length > 0) db.update(articles).set(updates).where(eq(articles.id, id)).run();
+    }).immediate();
 
     const row = loadArticleDTO(id);
     if (!row) return jsonError(404, "Not found");

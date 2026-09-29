@@ -16,7 +16,7 @@ export interface SyncSummary {
   results: FetchResult[];
 }
 
-export async function syncAllFeeds(options?: { feedId?: string }): Promise<SyncSummary> {
+export async function syncAllFeeds(options?: { feedId?: string; failedOnly?: boolean }): Promise<SyncSummary> {
   const lock = acquireSyncLock();
   if (!lock) {
     return {
@@ -33,7 +33,7 @@ export async function syncAllFeeds(options?: { feedId?: string }): Promise<SyncS
     const all = db.select().from(feeds).all();
     const targets = options?.feedId
       ? all.filter((f) => f.id === options.feedId)
-      : all;
+      : options?.failedOnly ? all.filter((f)=>f.lastFetchStatus === "error") : all;
 
     const summary: SyncSummary = {
       updated: 0,
@@ -59,7 +59,7 @@ export async function syncAllFeeds(options?: { feedId?: string }): Promise<SyncS
       }
 
       // 手動指定時は interval を無視して強制取得
-      if (!options?.feedId && !shouldFetch(feed)) {
+      if (!options?.feedId && !options?.failedOnly && !shouldFetch(feed)) {
         summary.skipped++;
         continue;
       }

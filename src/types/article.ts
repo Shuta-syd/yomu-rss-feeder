@@ -6,6 +6,7 @@ export interface ArticleDTO {
   url: string;
   author: string | null;
   contentHtml: string | null;
+  browserImportedAt?: number | null;
   contentPlain: string | null;
   thumbnailUrl: string | null;
   publishedAt: number | null;
@@ -13,10 +14,12 @@ export interface ArticleDTO {
   detectedLanguage: string | null;
   isRead: boolean;
   isStarred: boolean;
+  isReadLater?: boolean;
   readAt: number | null;
   aiSummaryShort: string | null;
   aiTitleJa: string | null;
   aiTags: string | null;
+  manualClassification?: string | null;
   aiStage1Status: string;
   aiSummaryFull: string | null;
   aiTranslation: string | null;

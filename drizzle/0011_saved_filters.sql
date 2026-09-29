@@ -1,0 +1,6 @@
+CREATE TABLE saved_filters (
+ id TEXT PRIMARY KEY NOT NULL,
+ name TEXT NOT NULL UNIQUE,
+ conditions TEXT NOT NULL,
+ created_at INTEGER NOT NULL
+);

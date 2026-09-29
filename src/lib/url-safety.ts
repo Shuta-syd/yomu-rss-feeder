@@ -57,7 +57,7 @@ function isPrivateAddress(address: string): boolean {
   return true;
 }
 
-async function assertSafeHttpUrl(rawUrl: string): Promise<URL> {
+export async function assertSafeHttpUrl(rawUrl: string): Promise<URL> {
   let url: URL;
   try {
     url = new URL(rawUrl);

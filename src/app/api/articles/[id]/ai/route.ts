@@ -1,3 +1,5 @@
+import { reuseArticleResult } from "@/lib/llm/article-cache";
+import type { ChatParams } from "@/lib/llm/provider";
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -52,19 +54,25 @@ export async function POST(
         }
 
         try {
-          let fullContent = "";
-          const gen = provider.chatStream({
+          const params: ChatParams = {
             systemPrompt: STAGE2_SYSTEM,
+            purpose: "detail",
             userPrompt: stage2UserPrompt(article.title, article.contentPlain!, article.contentHtml),
             maxOutputTokens: 32768,
-          });
-
-          for await (const chunk of gen) {
-            fullContent += chunk;
-            send("chunk", { text: chunk });
-          }
-
-          const parsed = parseAndValidate(fullContent, stage2Schema);
+          };
+          const result = await reuseArticleResult({
+            url: article.url, provider: settings.stage2Provider, model: settings.geminiModelStage2,
+            params, fresh: article.aiStage2Status === "done",
+          }, async () => {
+            let content = "";
+            for await (const chunk of provider.chatStream(params)) {
+              content += chunk;
+              send("chunk", { text: chunk });
+            }
+            return content;
+          }, content => { parseAndValidate(content, stage2Schema); });
+          if (result.reused) send("chunk", { text: result.content });
+          const parsed = parseAndValidate(result.content, stage2Schema);
 
           // 翻訳はMarkdownで返されるのでHTML変換してサニタイズ
           const translationHtml = parsed.translation

@@ -24,12 +24,16 @@ export async function POST(
       .run();
 
     try {
-      await processStage1ForArticles([id]);
+      await processStage1ForArticles([id], { forceSummary: true });
     } catch (e) {
       return jsonError(500, e instanceof Error ? e.message : String(e));
     }
 
     const updated = db.select().from(articles).where(eq(articles.id, id)).get();
+    if (updated?.aiStage1Status !== "done") {
+      return jsonError(updated?.aiStage1Status === "pending" ? 429 : 502,
+        updated?.aiStage1Error ?? "AI処理を完了できませんでした");
+    }
     return NextResponse.json(updated);
   });
 }

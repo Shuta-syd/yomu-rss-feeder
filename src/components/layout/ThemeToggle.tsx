@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 
+import { ReaderIcon } from "@/components/ui/ReaderIcon";
+
 type Theme = "light" | "dark";
 
-export function ThemeToggle() {
+export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   const [theme, setTheme] = useState<Theme | null>(null);
 
   useEffect(() => {
@@ -26,11 +28,11 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="shrink-0 rounded px-2 py-1 text-sm"
-      style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-      aria-label="Toggle theme"
+      className={compact ? "reader-icon-button" : "shrink-0 rounded px-2 py-1 text-sm"}
+      style={compact ? undefined : { background: "var(--card)", border: "1px solid var(--card-border)" }}
+      aria-label={theme === "dark" ? "ライトモードに切り替え" : "ダークモードに切り替え"}
     >
-      {theme === "dark" ? "🌙" : "☀️"}
+      {compact ? <ReaderIcon name={theme === "dark" ? "moon" : "sun"}/> : theme === "dark" ? "🌙" : "☀️"}
     </button>
   );
 }

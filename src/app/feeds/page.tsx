@@ -1,12 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {UpdateStatusPanel} from "@/components/feeds/UpdateStatusPanel";
+import type {AIUpdateStatus} from "@/lib/update-status";
 import { FeedSidebar } from "@/components/feeds/FeedSidebar";
 import { AddFeedDialog } from "@/components/feeds/AddFeedDialog";
 import { ReadFilterToggle } from "@/components/feeds/ReadFilterToggle";
+import { ClassificationFilters } from "@/components/articles/ClassificationFilters";
 import { ArticleList } from "@/components/articles/ArticleList";
+import { groupArticles } from "@/lib/article-groups";
+import { articleNeighbors } from "@/lib/article-navigation";
+import { articleShortcut } from "@/lib/article-shortcuts";
 import { ArticleDetail } from "@/components/articles/ArticleDetail";
+import { ReaderIcon } from "@/components/ui/ReaderIcon";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { buildArticlesParams, type ReadFilter } from "@/lib/articles-params";
 import { parseFeedsUrl, buildFeedsUrl } from "@/lib/feeds-url-state";
@@ -33,20 +40,36 @@ export default function FeedsPage() {
   const [selected, setSelected] = useState<ArticleDTO | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const loadingMoreRef = useRef(false);
+  const [grouping, setGrouping] = useState(true);
+  useEffect(() => { try { setGrouping(localStorage.getItem("yomu-group-related") !== "false"); } catch { /* Storage may be unavailable. */ } }, []);
+  const changeGrouping = useCallback((value: boolean) => {
+    setGrouping(value);
+    try { localStorage.setItem("yomu-group-related", String(value)); } catch { /* Keep the current session usable. */ }
+  }, []);
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
   const abortRef = useRef<AbortController | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncError,setSyncError]=useState<string|null>(null);
+  const [classifications, setClassifications] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [listWidth, setListWidth] = useState<number | null>(null);
-  const [aiStatus, setAiStatus] = useState<{ pending: number; processing: number; failed: number; currentTitle: string | null; currentFeedTitle: string | null } | null>(null);
+  const [aiStatus, setAiStatus] = useState<AIUpdateStatus | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isCompactDesktop, setIsCompactDesktop] = useState(false);
   const [desktopSidebarExpanded, setDesktopSidebarExpanded] = useState(true);
   const [compactDrawerOpen, setCompactDrawerOpen] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [mobileView, setMobileView] = useState<"sidebar" | "list" | "detail">("list");
-  const [view, setView] = useState<"feeds" | "starred">("feeds");
+  const [readLaterCount, setReadLaterCount] = useState(0);
+  const loadReadLaterCount = useCallback(async () => {
+    try { const response = await fetch("/api/articles?isReadLater=true&limit=1"); if (response.ok) setReadLaterCount((await response.json()).total); } catch { /* Keep the last count while offline. */ }
+  }, []);
+  useEffect(() => { loadReadLaterCount(); const timer=setInterval(loadReadLaterCount,30000);return () => clearInterval(timer); }, [loadReadLaterCount]);
+  const [view, setView] = useState<"feeds" | "starred" | "later">("feeds");
+  const readLaterListVersion = view === "later" ? readLaterCount : 0;
   const [markingRead, setMarkingRead] = useState(false);
   const [autoMarkAsRead, setAutoMarkAsRead] = useState(true);
   const [slideDirection, setSlideDirection] = useState<"forward" | "back">("forward");
@@ -239,6 +262,7 @@ export default function FeedsPage() {
       feedId: selectedFeedId,
       category: selectedCategory,
       search,
+      classifications,
       view,
       readFilter,
     });
@@ -256,17 +280,20 @@ export default function FeedsPage() {
     } catch (e) {
       if ((e as Error).name !== "AbortError") throw e;
     }
-  }, [selectedFeedId, selectedCategory, search, view, readFilter, router]);
+  }, [selectedFeedId, selectedCategory, search, classifications, view, readFilter, router]);
 
   const loadMore = useCallback(async () => {
-    if (!nextCursor || loadingMore) return;
+    if (!nextCursor || loadingMoreRef.current) return;
     const ctrl = abortRef.current;
     if (!ctrl) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
+    setLoadMoreError(null);
     const params = buildArticlesParams({
       feedId: selectedFeedId,
       category: selectedCategory,
       search,
+      classifications,
       view,
       readFilter,
       cursor: nextCursor,
@@ -283,13 +310,16 @@ export default function FeedsPage() {
         if (ctrl.signal.aborted) return;
         setArticles((prev) => appendArticles(prev, data.articles));
         setNextCursor(data.nextCursor ?? null);
+      } else {
+        setLoadMoreError("続きを取得できませんでした。再試行してください。");
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") throw e;
+      if (!ctrl.signal.aborted && (e as Error).name !== "AbortError") setLoadMoreError("通信できませんでした。接続を確認して再試行してください。");
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [nextCursor, loadingMore, selectedFeedId, selectedCategory, search, view, readFilter, router]);
+  }, [nextCursor, selectedFeedId, selectedCategory, search, classifications, view, readFilter, router]);
 
   // バックグラウンド更新: リストを丸ごと差し替えず ID マージで更新する。
   // 行コンポーネントの再マウント (サムネイル再読み込み)・ページネーション破壊・
@@ -298,9 +328,11 @@ export default function FeedsPage() {
     feedId: selectedFeedId,
     category: selectedCategory,
     search,
+    classifications,
     view,
     readFilter,
   }).toString();
+  useEffect(() => { setLoadMoreError(null); }, [articlesQueryKey]);
   const queryKeyRef = useRef(articlesQueryKey);
   const articlesEmptyRef = useRef(true);
   const refreshingRef = useRef(false);
@@ -320,6 +352,7 @@ export default function FeedsPage() {
         feedId: selectedFeedId,
         category: selectedCategory,
         search,
+        classifications,
         view,
         readFilter,
       });
@@ -341,7 +374,7 @@ export default function FeedsPage() {
     } finally {
       refreshingRef.current = false;
     }
-  }, [selectedFeedId, selectedCategory, search, view, readFilter, router]);
+  }, [selectedFeedId, selectedCategory, search, classifications, view, readFilter, router]);
 
   useEffect(() => {
     loadFeeds();
@@ -381,7 +414,7 @@ export default function FeedsPage() {
   useEffect(() => {
     if (!restored) return;
     loadInitial();
-  }, [loadInitial, restored]);
+  }, [loadInitial, restored, readLaterListVersion]);
 
   // マウント時に一度だけ URL を読み、閲覧状態を復元する。
   // ハイドレーション不整合を避けるため useState 初期値ではなく effect で行う。
@@ -389,9 +422,10 @@ export default function FeedsPage() {
     const s = parseFeedsUrl(window.location.search);
     if (s.feedId) setSelectedFeedId(s.feedId);
     if (s.category) setSelectedCategory(s.category);
-    if (s.view === "starred") setView("starred");
+    setView(s.view);
     if (s.readFilter !== "all") setReadFilter(s.readFilter);
     if (s.search) setSearch(s.search);
+    setClassifications(s.classifications ?? []);
     if (s.articleId) {
       fetch(`/api/articles/${s.articleId}`)
         .then((r) => {
@@ -427,9 +461,10 @@ export default function FeedsPage() {
         view,
         readFilter,
         search,
+        classifications,
       });
     window.history.replaceState(null, "", url);
-  }, [restored, selected?.id, selectedFeedId, selectedCategory, view, readFilter, search]);
+  }, [restored, selected?.id, selectedFeedId, selectedCategory, view, readFilter, search, classifications]);
 
   useEffect(() => {
     let cancelled = false;
@@ -439,6 +474,7 @@ export default function FeedsPage() {
         if (!res.ok || cancelled) return;
         const data = await res.json();
         const next = {
+          pauseReason: data.pauseReason ?? null,
           pending: data.pending,
           processing: data.processing,
           failed: data.failed,
@@ -447,6 +483,7 @@ export default function FeedsPage() {
         };
         setAiStatus((prev) => (
           prev &&
+          prev.pauseReason === next.pauseReason &&
           prev.pending === next.pending &&
           prev.processing === next.processing &&
           prev.failed === next.failed &&
@@ -458,7 +495,7 @@ export default function FeedsPage() {
       } catch {}
     }
     poll();
-    const active = (aiStatus?.pending ?? 0) + (aiStatus?.processing ?? 0) > 0;
+    const active = !aiStatus?.pauseReason && (aiStatus?.pending ?? 0) + (aiStatus?.processing ?? 0) > 0;
     const interval = setInterval(() => {
       poll();
       if (active) refreshArticles();
@@ -467,9 +504,10 @@ export default function FeedsPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [aiStatus?.pending, aiStatus?.processing, refreshArticles]);
+  }, [aiStatus?.pending, aiStatus?.processing, aiStatus?.pauseReason, refreshArticles]);
 
   async function markAllRead() {
+    if (view === "later") return;
     setMarkingRead(true);
     const body: Record<string, string> = {};
     if (selectedFeedId) body.feedId = selectedFeedId;
@@ -487,13 +525,12 @@ export default function FeedsPage() {
   }
 
   async function sync() {
-    setSyncing(true);
-    const res = await fetch("/api/sync", { method: "POST" });
-    setSyncing(false);
-    if (res.ok) {
-      loadFeeds();
-      refreshArticles();
-    }
+    setSyncing(true);setSyncError(null);
+    try {
+      const res = await fetch("/api/sync", { method: "POST" });
+      if (res.ok) {void loadFeeds();void refreshArticles();}
+      else setSyncError(res.status===409?"ほかの更新が進行中です。しばらく待って再試行してください。":"更新できませんでした。再試行してください。");
+    } catch {setSyncError("通信できませんでした。接続状態を確認してください。");} finally {setSyncing(false);}
   }
 
   async function logout() {
@@ -511,20 +548,47 @@ export default function FeedsPage() {
         body: JSON.stringify({ isRead: true }),
       }).then((r) => r.ok && r.json()).then((updated) => {
         if (updated) {
-          setSelected(updated);
+          setSelected(current => current?.id === updated.id ? updated : current);
           setArticles((prev) =>
             prev.map((x) => (x.id === updated.id ? updated : x)),
           );
           loadFeeds();
         }
-      });
+      }).catch(() => { /* Keep reading if marking as read fails. */ });
     }
   }, [autoMarkAsRead, goToMobileView, isMobile, loadFeeds]);
 
   const handleArticleChange = useCallback((a: ArticleDTO) => {
     setSelected((cur) => (cur?.id === a.id ? a : cur));
-    setArticles((prev) => prev.map((x) => (x.id === a.id ? a : x)));
-  }, []);
+    setArticles((prev) => prev.map((x) => (x.id === a.id ? a : x)).filter(x => {
+      if (view === "later" && !x.isReadLater) return false;
+      if (classifications.length === 0) return true;
+      try { const tags: unknown = JSON.parse(x.aiTags ?? "[]"); return Array.isArray(tags) && classifications.every(tag => tags.includes(tag)); }
+      catch { return false; }
+    }));
+    loadReadLaterCount();
+  }, [view, classifications, loadReadLaterCount]);
+
+  const allowGrouping = view === "feeds" && selectedFeedId === null;
+  const articleGroups = useMemo(() => allowGrouping && grouping
+    ? groupArticles(articles)
+    : articles.map(representative => ({ representative, related: [] as ArticleDTO[] })), [articles, allowGrouping, grouping]);
+  const neighbors = articleNeighbors(articleGroups, selected);
+
+  useEffect(() => {
+    if (isMobile || !selected || compactDrawerOpen) return;
+    function onArticleKeyDown(event: KeyboardEvent) {
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], dialog[open], [aria-modal="true"]')) return;
+      const direction = articleShortcut(event);
+      if (!direction) return;
+      const article = direction === "previous" ? neighbors.previous : neighbors.next;
+      if (!article) return;
+      event.preventDefault();
+      handleSelect(article);
+    }
+    window.addEventListener("keydown", onArticleKeyDown);
+    return () => window.removeEventListener("keydown", onArticleKeyDown);
+  }, [isMobile, selected, compactDrawerOpen, neighbors.previous, neighbors.next, handleSelect]);
 
   const showSidebar = !isMobile || mobileView === "sidebar";
   const showList = !isMobile || mobileView === "list";
@@ -610,6 +674,12 @@ export default function FeedsPage() {
             ? closeMobileSidebar
             : () => closeDesktopSidebar()}
           view={view}
+          readLaterCount={readLaterCount}
+          onSelectLater={() => {
+            setView("later"); setSelectedFeedId(null); setSelectedCategory(null); setSelected(null);
+            setReadFilter("all");setSearch("");setClassifications([]);
+            finishSidebarNavigation();
+          }}
           onSelectStarred={() => {
             setView("starred");
             setSelectedFeedId(null);
@@ -632,21 +702,21 @@ export default function FeedsPage() {
         aria-hidden={compactDrawerModal ? true : undefined}
       >
         <div
-          className="article-list-toolbar flex items-center gap-2 border-b p-2"
+          className="reader-toolbar"
           style={{ borderColor: "var(--card-border)" }}
         >
+          <div className="reader-search-row">
           {isMobile && (
             <button
               ref={sidebarOpenButtonRef}
               type="button"
               onClick={openMobileSidebar}
-              className="shrink-0 rounded px-2 py-1 text-sm"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              className="reader-icon-button"
               aria-label="フィード一覧を開く"
               aria-controls="feed-sidebar-panel"
               aria-expanded="false"
             >
-              ☰
+              <ReaderIcon name="menu"/>
             </button>
           )}
           {!isMobile && !desktopSidebarOpen && (
@@ -654,78 +724,74 @@ export default function FeedsPage() {
               ref={sidebarOpenButtonRef}
               type="button"
               onClick={openDesktopSidebar}
-              className="shrink-0 rounded px-2 py-1 text-sm"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              className="reader-icon-button"
               aria-label="フィード一覧を開く"
               aria-controls="feed-sidebar-panel"
               aria-expanded="false"
               title="フィード一覧を開く"
             >
-              ☰
+              <ReaderIcon name="menu"/>
             </button>
           )}
+          <div className="reader-search-field">
+          <ReaderIcon name="search"/>
           <input
             type="search"
-            placeholder="検索..."
+            placeholder="記事を検索"
+            aria-label="記事を検索"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="article-list-search min-w-0 flex-1 rounded px-2 py-1 text-sm"
-            style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+            className="reader-search-input"
           />
-          <div className="article-list-toolbar-actions flex shrink-0 items-center gap-2">
+          </div>
+          </div>
+          <div className="reader-toolbar-actions">
             <ReadFilterToggle value={readFilter} onChange={setReadFilter} />
             <button
               onClick={markAllRead}
-              disabled={markingRead || articles.every((a) => a.isRead)}
-              className="shrink-0 rounded px-2 py-1 text-sm disabled:opacity-40"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
-              title="表示中をすべて既読"
+              disabled={view === "later" || classifications.length > 0 || markingRead || articles.every((a) => a.isRead)}
+              className="reader-icon-button"
+              title={view === "later" ? "あとで読むでは一括既読を利用できません" : classifications.length > 0 ? "分類で絞り込み中は一括既読を利用できません" : "表示中をすべて既読"}
               aria-label="表示中をすべて既読"
             >
-              {markingRead ? "…" : "✓"}
+              {markingRead ? "…" : <ReaderIcon name="check"/>}
             </button>
-            <ThemeToggle />
+            <ThemeToggle compact />
             <a
               href="/settings"
-              className="shrink-0 rounded px-2 py-1 text-sm"
-              style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
+              className="reader-icon-button"
               aria-label="設定"
             >
-              ⚙
+              <ReaderIcon name="settings"/>
             </a>
           </div>
         </div>
-        {/* バッチ処理中はバナーを出し続け、ポーリングごとの出没でレイアウトが上下しないようにする */}
-        {aiStatus && (aiStatus.processing > 0 || aiStatus.pending > 0) && (
-          <div
-            className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
-            style={{ borderColor: "var(--card-border)", background: "var(--ai-bg)", color: "var(--muted)" }}
-          >
-            <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full" style={{ background: "var(--accent)" }} />
-            {aiStatus.processing > 0 && aiStatus.currentFeedTitle ? (
-              <>
-                <span className="shrink-0" style={{ color: "var(--accent)" }}>翻訳中</span>
-                <span className="min-w-0 flex-1 truncate font-medium" title={`${aiStatus.currentFeedTitle} / ${aiStatus.currentTitle ?? ""}`}>
-                  {aiStatus.currentFeedTitle}
-                  {aiStatus.currentTitle && <span className="ml-1 opacity-60">― {aiStatus.currentTitle}</span>}
-                </span>
-              </>
-            ) : (
-              <span className="min-w-0 flex-1 truncate" style={{ color: "var(--accent)" }}>
-                AI処理待ち {aiStatus.pending}件
-              </span>
-            )}
-          </div>
-        )}
+        {view === "later" && <div className="flex items-center gap-2 border-b px-4 py-3 text-sm" style={{borderColor:"var(--card-border)",color:"var(--accent)"}}><ReaderIcon name="bookmark"/><h2 className="font-semibold">あとで読む</h2><span className="ml-auto text-xs">{readLaterCount}件保存</span></div>}
+        <ClassificationFilters
+          conditions={{feedId:selectedFeedId,category:selectedCategory,view,readFilter,search,classifications}}
+          onClassifications={values=>{setClassifications(values);setSelected(null);}}
+          onApply={value=>{
+            setClassifications(value.classifications);setSelectedFeedId(value.feedId);setSelectedCategory(value.category);
+            setView(value.view);setReadFilter(value.readFilter);setSearch(value.search);setSelected(null);
+          }}
+        />
+        <UpdateStatusPanel syncError={syncError} ai={aiStatus} syncing={syncing} onUpdated={()=>{void loadFeeds();void refreshArticles();}}/>
         <div className="flex-1 overflow-hidden">
           <ArticleList
             articles={articles}
             selectedId={selected?.id ?? null}
             onSelect={handleSelect}
+            onChange={handleArticleChange}
             onLoadMore={loadMore}
             hasMore={nextCursor !== null}
             loadingMore={loadingMore}
             resetKey={articlesQueryKey}
+            allowGrouping={allowGrouping}
+            groups={articleGroups}
+            grouping={grouping}
+            onGroupingChange={changeGrouping}
+            loadMoreError={loadMoreError}
+            emptyMessage={view === "later" ? "条件に合う保存記事がありません。一覧の「あとで読む」から追加できます。" : undefined}
           />
         </div>
       </section>
@@ -767,6 +833,13 @@ export default function FeedsPage() {
             key={selected?.id ?? "empty"}
             article={selected}
             onChange={handleArticleChange}
+            previousArticle={neighbors.previous}
+            nextArticle={neighbors.next}
+            onNavigate={handleSelect}
+            hasMore={nextCursor !== null}
+            loadingMore={loadingMore}
+            loadMoreError={loadMoreError}
+            onLoadMore={loadMore}
           />
         </div>
       </section>

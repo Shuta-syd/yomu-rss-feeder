@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, uniqueIndex, index, real } from "drizzle-orm/sqlite-core";
 
 export const appConfig = sqliteTable("app_config", {
   key: text("key").primaryKey(),
@@ -58,6 +58,7 @@ export const articles = sqliteTable(
     url: text("url").notNull(),
     author: text("author"),
     contentHtml: text("content_html"),
+    browserImportedAt: integer("browser_imported_at"),
     contentPlain: text("content_plain"),
     thumbnailUrl: text("thumbnail_url"),
     publishedAt: integer("published_at"),
@@ -65,11 +66,13 @@ export const articles = sqliteTable(
     detectedLanguage: text("detected_language"),
     dedupHash: text("dedup_hash").notNull(),
     isRead: integer("is_read", { mode: "boolean" }).notNull().default(false),
+    isReadLater: integer("is_read_later", { mode: "boolean" }).notNull().default(false),
     isStarred: integer("is_starred", { mode: "boolean" }).notNull().default(false),
     readAt: integer("read_at"),
     aiSummaryShort: text("ai_summary_short"),
     aiTitleJa: text("ai_title_ja"),
     aiTags: text("ai_tags"),
+    manualClassification: text("manual_classification"),
     aiStage1Status: text("ai_stage1_status").notNull().default("pending"),
     aiStage1Error: text("ai_stage1_error"),
     aiStage1ProcessedAt: integer("ai_stage1_processed_at"),
@@ -90,6 +93,7 @@ export const articles = sqliteTable(
     index("idx_articles_sort").on(table.sortKey, table.id),
     index("idx_articles_feed_sort").on(table.feedId, table.sortKey, table.id),
     index("idx_articles_is_read").on(table.isRead),
+    index("idx_articles_is_read_later").on(table.isReadLater),
     index("idx_articles_is_starred").on(table.isStarred),
   ],
 );
@@ -108,3 +112,42 @@ export type SavedSite = typeof savedSites.$inferSelect;
 export type NewSavedSite = typeof savedSites.$inferInsert;
 export type Article = typeof articles.$inferSelect;
 export type NewArticle = typeof articles.$inferInsert;
+
+export const aiUsage = sqliteTable("ai_usage", {
+  id: text("id").primaryKey(),
+  createdAt: integer("created_at").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  purpose: text("purpose").notNull(),
+  status: text("status").notNull(),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  inputUsdPerMillion: real("input_usd_per_million").notNull(),
+  outputUsdPerMillion: real("output_usd_per_million").notNull(),
+  yenPerUsd: real("yen_per_usd").notNull(),
+  reservedYen: real("reserved_yen").notNull(),
+  costYen: real("cost_yen").notNull(),
+  completedAt: integer("completed_at"),
+}, table => [index("idx_ai_usage_created").on(table.createdAt)]);
+
+export const articleBrowserImports = sqliteTable("article_browser_imports", {
+  articleId: text("article_id").primaryKey().references(() => articles.id, {onDelete:"cascade"}),
+  originalHtml: text("original_html"),
+  originalPlain: text("original_plain"),
+  importedAt: integer("imported_at").notNull(),
+});
+
+export const savedFilters = sqliteTable("saved_filters", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  conditions: text("conditions").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const aiResultCache = sqliteTable("ai_result_cache", {
+  cacheKey: text("cache_key").primaryKey(),
+  content: text("content"),
+  owner: text("owner"),
+  expiresAt: integer("expires_at").notNull(),
+  reuseCount: integer("reuse_count").notNull().default(0),
+}, table => [index("idx_ai_result_cache_expires").on(table.expiresAt)]);

@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import {ensureNikkeiLogin} from "./browser/login";
 import { syncAllFeeds } from "./rss/sync";
 import { getPendingStage1Ids, processStage1ForArticles } from "./llm/stage1";
 import { initVapid, sendPushToAll } from "./push";
@@ -30,6 +31,7 @@ export function initCron(): boolean {
     tickRunning = true;
     const startedAt = Date.now();
     try {
+      await ensureNikkeiLogin();
       const summary = await syncAllFeeds();
       if (summary.locked) {
         console.log("[yomu] cron tick: another sync in progress, skipping");

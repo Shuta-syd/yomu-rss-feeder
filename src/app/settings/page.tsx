@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ArticleFontSizeControl } from "@/components/layout/ArticleFontSizeControl";
+import { MemosIntegrationPanel } from "@/components/layout/MemosIntegrationPanel";
+import { BrowserIntegrationPanel } from "@/components/layout/BrowserIntegrationPanel";
+import { AIUsagePanel } from "@/components/layout/AIUsagePanel";
 import { FeedIcon } from "@/components/feeds/FeedIcon";
 
 type ProviderType = "gemini" | "openai" | "anthropic";
@@ -23,6 +26,8 @@ interface Settings {
 
 const PROVIDER_MODELS: Record<ProviderType, string[]> = {
   gemini: [
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
     "gemini-3-flash-preview",
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash",
@@ -96,6 +101,7 @@ function Toast({ message }: ToastProps) {
 export default function SettingsPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>("ai");
+  useEffect(()=>{if(new URLSearchParams(window.location.search).get('tab')==='integration')setActiveTab('integration');},[]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [openaiApiKey, setOpenaiApiKey] = useState("");
@@ -375,30 +381,31 @@ export default function SettingsPage() {
   const sectionTitleCls = "text-base font-semibold";
   const primaryBtnCls = "rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 transition-opacity";
   const primaryBtnStyle = { background: "var(--accent)", color: "var(--accent-fg)" };
-  const cardCls = "rounded-lg border p-5 space-y-4";
+  const cardCls = "settings-card space-y-4";
   const cardStyle = { borderColor: "var(--card-border)", background: "var(--card)" };
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6 md:px-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">設定</h1>
+    <main className="settings-shell">
+      <div className="settings-header">
+        <div><h1>設定</h1><p>Yomuを自分の読み方に合わせる</p></div>
         <div className="flex gap-2">
-          <ThemeToggle />
+          <ThemeToggle compact />
           <a
             href="/feeds"
             className="shrink-0 rounded-md px-3 py-1.5 text-sm"
             style={{ background: "var(--card)", border: "1px solid var(--card-border)" }}
           >
-            ← 戻る
+            ← 記事へ戻る
           </a>
         </div>
       </div>
 
       {/* タブバー: ピル形状 (モバイルは横スクロール) */}
       <div
-        className="-mx-4 mb-6 flex gap-1 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0"
+        className="settings-nav"
         style={{ scrollbarWidth: "none" }}
         role="tablist"
+        aria-label="設定カテゴリ"
       >
         {TABS.map((t) => {
           const active = activeTab === t.key;
@@ -407,6 +414,16 @@ export default function SettingsPage() {
               key={t.key}
               role="tab"
               aria-selected={active}
+              id={`settings-tab-${t.key}`}
+              aria-controls="settings-panel"
+              tabIndex={active ? 0 : -1}
+              onKeyDown={(e) => {
+                const index = TABS.findIndex(tab => tab.key === activeTab);
+                const delta = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+                const next = e.key === "Home" ? 0 : e.key === "End" ? TABS.length - 1 : delta ? (index + delta + TABS.length) % TABS.length : -1;
+                const target = TABS[next];
+                if (target) { e.preventDefault(); setActiveTab(target.key); document.getElementById(`settings-tab-${target.key}`)?.focus(); }
+              }}
               onClick={() => setActiveTab(t.key)}
               className="shrink-0 whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors"
               style={{
@@ -414,17 +431,21 @@ export default function SettingsPage() {
                 color: active ? "var(--accent)" : "var(--muted)",
               }}
             >
-              {t.label}
+              <span>{t.label}</span><small>{({ai:"費用・モデル・接続キー",feeds:"翻訳・要約の対象",notification:"新着のお知らせ",integration:"Memos・日経",account:"表示・パスワード"})[t.key]}</small>
             </button>
           );
         })}
       </div>
 
+      <div className="settings-content" id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${activeTab}`} tabIndex={0}>
+      <div className="settings-page-heading"><h2>{TABS.find(t => t.key === activeTab)?.label}</h2><p>{({ai:"利用状況を確認して、AIの使い方を調整できます。",feeds:"フィードごとに自動翻訳と要約を設定できます。",notification:"新しい記事のお知らせを設定できます。",integration:"メモアプリや購読中のメディアと接続できます。",account:"読みやすさとログイン情報を設定できます。"})[activeTab]}</p></div>
       {/* AIタブ */}
       {activeTab === "ai" && (
         <section className="space-y-4">
+          <AIUsagePanel models={[settings.geminiModelStage1,settings.geminiModelStage2]} />
           <div className={cardCls} style={cardStyle}>
-            <h2 className={sectionTitleCls}>API Keys</h2>
+            <h2 className={sectionTitleCls}>AIサービスの接続</h2>
+            <p className="settings-description">利用するサービスのキーを登録します。登録済みのキーは、変更する場合だけ入力してください。</p>
             <div>
               <label className={labelCls}>Gemini API Key</label>
               <input
@@ -464,7 +485,7 @@ export default function SettingsPage() {
             <h2 className={sectionTitleCls}>使用モデル</h2>
 
             <div>
-              <label className={labelCls}>自動要約 (Stage 1)</label>
+              <label className={labelCls}>自動翻訳・要約・分類</label>
               <select
                 value={settings.geminiModelStage1}
                 onChange={(e) => {
@@ -486,7 +507,7 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className={labelCls}>詳細分析 (Stage 2)</label>
+              <label className={labelCls}>記事を開いて生成する詳細分析</label>
               <select
                 value={settings.geminiModelStage2}
                 onChange={(e) => {
@@ -515,7 +536,7 @@ export default function SettingsPage() {
               className={primaryBtnCls}
               style={primaryBtnStyle}
             >
-              {saving ? "保存中..." : "保存"}
+              {saving ? "保存中..." : "接続キー・モデルを保存"}
             </button>
           </div>
         </section>
@@ -528,7 +549,7 @@ export default function SettingsPage() {
             <div>
               <h2 className={sectionTitleCls}>AI自動翻訳の対象</h2>
               <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
-                OFF にすると新着記事は Stage1 の自動翻訳・要約・タグ付けの対象外になります。既存の pending 記事も skipped に変換されます。
+                OFF にすると自動翻訳・要約は行いません。ジャンル・業界・テーマの分類は、ON/OFFに関係なく全フィードの新着記事に行います。過去の記事は自動で再処理しません。
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -698,6 +719,8 @@ export default function SettingsPage() {
       {/* 連携タブ */}
       {activeTab === "integration" && (
         <section className="space-y-4">
+          <MemosIntegrationPanel />
+          <BrowserIntegrationPanel />
           <div className={cardCls} style={cardStyle}>
             <h2 className={sectionTitleCls}>OPML</h2>
             <p className="text-sm" style={{ color: "var(--muted)" }}>
@@ -796,6 +819,7 @@ export default function SettingsPage() {
         </section>
       )}
 
+      </div>
       <Toast message={toast} />
     </main>
   );

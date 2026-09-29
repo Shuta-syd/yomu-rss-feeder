@@ -1,0 +1,16 @@
+import {beforeEach,it,expect,vi} from 'vitest';
+import {NextRequest} from 'next/server';
+const mocks=vi.hoisted(()=>({submit:vi.fn(),login:vi.fn(),auth:vi.fn(),rate:vi.fn()}));
+vi.mock('@/lib/api-helpers',()=>({withAuth:async(fn:()=>Promise<unknown>)=>{const denied=mocks.auth();return denied??fn()},jsonError:(status:number,error:string)=>Response.json({error},{status})}));
+vi.mock('@/lib/auth',()=>({checkRateLimit:mocks.rate}));
+vi.mock('@/lib/browser/otp',()=>({submitNikkeiOtp:mocks.submit}));
+vi.mock('@/lib/browser/login',()=>({ensureNikkeiLogin:mocks.login}));
+vi.mock('@/lib/browser/login-settings',()=>({getLoginSettings:vi.fn(),saveLoginSettings:vi.fn(),clearLoginCredentials:vi.fn()}));
+import {POST} from '@/app/api/browser/login/route';
+const request=(body:string,origin='http://localhost')=>new NextRequest('http://localhost/api/browser/login',{method:'POST',headers:{host:'localhost',origin},body});
+beforeEach(()=>{vi.clearAllMocks();mocks.auth.mockReturnValue(undefined);mocks.submit.mockResolvedValue({state:'logged_in'});});
+it('submits a valid code without returning it',async()=>{const r=await POST(request('{"code":"123456"}'));expect(r.status).toBe(200);expect(await r.json()).toEqual({state:'logged_in'});expect(mocks.submit).toHaveBeenCalledWith('123456');});
+it('rejects invalid codes without browser access',async()=>{expect((await POST(request('{"code":"123"}'))).status).toBe(400);expect(mocks.submit).not.toHaveBeenCalled();});
+it('requires auth and same origin',async()=>{mocks.auth.mockReturnValue(Response.json({}, {status:401}));expect((await POST(request('{"code":"123456"}'))).status).toBe(401);mocks.auth.mockReturnValue(undefined);expect((await POST(request('{"code":"123456"}','https://evil.example'))).status).toBe(403);expect(mocks.submit).not.toHaveBeenCalled();});
+it('keeps explicit restart separate from code submission',async()=>{mocks.login.mockResolvedValue({state:'otp_required'});expect((await POST(request(''))).status).toBe(200);expect(mocks.login).toHaveBeenCalledWith({force:true});expect(mocks.submit).not.toHaveBeenCalled();});
+it('rate limits verification attempts',async()=>{mocks.rate.mockImplementationOnce(()=>{throw new Response('',{status:429})});expect((await POST(request('{"code":"123456"}'))).status).toBe(429);expect(mocks.submit).not.toHaveBeenCalled();});

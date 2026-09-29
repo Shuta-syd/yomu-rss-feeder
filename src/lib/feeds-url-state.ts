@@ -1,3 +1,4 @@
+import { classificationGroups } from "./article-classification";
 import type { ReadFilter } from "@/lib/articles-params";
 
 // /feeds の閲覧状態を URL に保持し、リロード時に復元するためのパラメータ変換。
@@ -7,9 +8,10 @@ export interface FeedsUrlState {
   articleId: string | null;
   feedId: string | null;
   category: string | null;
-  view: "feeds" | "starred";
+  view: "feeds" | "starred" | "later";
   readFilter: ReadFilter;
   search: string;
+  classifications?: string[];
 }
 
 /** window.location.search 等のクエリ文字列を状態に変換する。不正値は既定にフォールバック。 */
@@ -19,11 +21,15 @@ export function parseFeedsUrl(search: string): FeedsUrlState {
   const category = p.get("cat") || null;
   const filter = p.get("filter");
   return {
+    ...(p.has("classification") ? {classifications: classificationGroups.flatMap(group => {
+      const value = p.getAll("classification").find(v => group.values.some(label => v === `${group.label}:${label}`));
+      return value ? [value] : [];
+    })} : {}),
     articleId: p.get("article") || null,
     // feed と cat は排他: feed 優先
     feedId,
     category: feedId ? null : category,
-    view: p.get("view") === "starred" ? "starred" : "feeds",
+    view: p.get("view") === "later" ? "later" : p.get("view") === "starred" ? "starred" : "feeds",
     readFilter: filter === "unread" ? "unread" : filter === "read" ? "read" : "all",
     search: p.get("q") ?? "",
   };
@@ -34,11 +40,13 @@ export function buildFeedsUrl(state: FeedsUrlState): string {
   const p = new URLSearchParams();
   if (state.feedId) p.set("feed", state.feedId);
   else if (state.category) p.set("cat", state.category);
+  if (state.view === "later") p.set("view", "later");
   if (state.view === "starred") p.set("view", "starred");
   if (state.readFilter === "unread") p.set("filter", "unread");
   else if (state.readFilter === "read") p.set("filter", "read");
   const q = state.search.trim();
   if (q) p.set("q", q);
+  for (const value of state.classifications ?? []) p.append("classification", value);
   if (state.articleId) p.set("article", state.articleId);
   const qs = p.toString();
   return qs ? `?${qs}` : "";

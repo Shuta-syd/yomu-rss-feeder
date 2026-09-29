@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { articles, feeds } from "@/lib/db/schema";
+import { feeds } from "@/lib/db/schema";
 import { withAuth, jsonError } from "@/lib/api-helpers";
 
 const updateSchema = z.object({
@@ -28,20 +28,7 @@ export async function PUT(
 
     db.update(feeds).set(parsed.data).where(eq(feeds.id, id)).run();
 
-    // aiEnabled が変化した場合、このフィードの既存 pending/skipped 記事を切り替える
-    if (parsed.data.aiEnabled !== undefined && parsed.data.aiEnabled !== existing.aiEnabled) {
-      if (parsed.data.aiEnabled === false) {
-        db.update(articles)
-          .set({ aiStage1Status: "skipped" })
-          .where(and(eq(articles.feedId, id), eq(articles.aiStage1Status, "pending")))
-          .run();
-      } else {
-        db.update(articles)
-          .set({ aiStage1Status: "pending" })
-          .where(and(eq(articles.feedId, id), eq(articles.aiStage1Status, "skipped")))
-          .run();
-      }
-    }
+    // 要約設定は次の処理時に参照する。分類待ちの記事は除外しない。
 
     const updated = db.select().from(feeds).where(eq(feeds.id, id)).get();
     return NextResponse.json(updated);

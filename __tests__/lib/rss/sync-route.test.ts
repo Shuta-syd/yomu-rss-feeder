@@ -1,0 +1,11 @@
+import {beforeEach,it,expect,vi} from 'vitest';
+import {NextRequest} from 'next/server';
+const sync=vi.hoisted(()=>vi.fn());
+vi.mock('@/lib/rss/sync',()=>({syncAllFeeds:sync}));
+vi.mock('@/lib/api-helpers',()=>({withAuth:async(fn:()=>Promise<unknown>)=>fn(),jsonError:(status:number,error:string)=>Response.json({error},{status})}));
+import {POST} from '@/app/api/sync/route';
+const request=(body:string)=>new NextRequest('http://localhost/api/sync',{method:'POST',body});
+beforeEach(()=>{sync.mockReset();sync.mockResolvedValue({updated:1,newArticles:0,errors:[]})});
+it('does not turn malformed or conflicting retry requests into all-feed updates',async()=>{expect((await POST(request('{'))).status).toBe(400);expect((await POST(request('{"feedId":"a","failedOnly":true}'))).status).toBe(400);expect(sync).not.toHaveBeenCalled();});
+it('passes the failed-only scope to the sync worker',async()=>{expect((await POST(request('{"failedOnly":true}'))).status).toBe(200);expect(sync).toHaveBeenCalledWith({feedId:undefined,failedOnly:true});});
+it('preserves the regular empty-body update action',async()=>{expect((await POST(request(''))).status).toBe(200);expect(sync).toHaveBeenCalledWith({feedId:undefined,failedOnly:undefined});});
